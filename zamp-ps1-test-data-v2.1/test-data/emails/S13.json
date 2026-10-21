@@ -1,0 +1,22 @@
+{
+  "test_id": "S13",
+  "shape": "internal InboundEmail (adapter output), not a provider webhook",
+  "provider_email_id": "test-email-S13",
+  "attachment_id": "test-att-S13-1",
+  "from": "billing@urbanlinen.example",
+  "to": [
+    "invoices@inbound.spiceroute.example"
+  ],
+  "subject": "Invoice UL-882",
+  "body_text": "Dear Sir/Madam,\n\nPlease find the attached invoice.\n\nRegards",
+  "is_reply_with_token": false,
+  "token_placeholder": null,
+  "token_note": null,
+  "attachments": [
+    {
+      "filename": "S13_UrbanLinen_UL-882_INCLUSIVE.pdf",
+      "path": "invoices/S13_UrbanLinen_UL-882_INCLUSIVE.pdf",
+      "content_type": "application/pdf"
+    }
+  ]
+}

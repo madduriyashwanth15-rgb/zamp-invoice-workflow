@@ -1,0 +1,18 @@
+po_number,line_no,item_code,line_kind,description,uom,qty_ordered,unit_price_pretax,gst_rate,line_amount_pretax
+PO-1001,1,CONT-500,goods,Food container 500 ml,pcs,2000,6.50,0.18,13000.00
+PO-1001,2,BAG-M,goods,Carry bag medium,pcs,1000,3.00,0.18,3000.00
+PO-1002,1,,goods,Floor cleaner 5 L can,can,20,450.00,0.18,9000.00
+PO-1002,2,,goods,Dishwash liquid 1 L,bottle,30,220.00,0.18,6600.00
+PO-7731,1,,goods,Onions,kg,200,30.00,0,6000.00
+PO-7731,2,,goods,Tomatoes,kg,100,40.00,0,4000.00
+PO-1003,1,,goods,LPG cylinder 19 kg commercial,cyl,25,2000.00,0.18,50000.00
+PO-1004,1,,service,Burner servicing,visit,4,1500.00,0.18,6000.00
+PO-1004,2,,goods,Gas hose replacement,pcs,6,450.00,0.18,2700.00
+PO-1005,1,BAG-M,goods,Carry bag medium,pcs,2000,3.00,0.18,6000.00
+PO-1006,1,,goods,Glass cleaner 500 ml,bottle,40,120.00,0.18,4800.00
+PO-1006,2,,goods,Garbage bag roll,roll,50,90.00,0.18,4500.00
+PO-1007,1,,service,Exhaust hood deep cleaning,visit,2,3500.00,0.18,7000.00
+PO-1007,2,,service,Duct cleaning,job,1,2000.00,0.18,2000.00
+PO-1008,1,,service,Napkin laundry,pcs,500,8.00,0.18,4000.00
+PO-1008,2,,service,Apron laundry,pcs,100,12.00,0.18,1200.00
+PO-1009,1,CONT-500,goods,Food container 500 ml,pcs,2000,6.50,0.18,13000.00

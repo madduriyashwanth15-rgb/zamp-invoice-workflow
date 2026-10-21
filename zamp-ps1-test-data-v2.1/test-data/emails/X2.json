@@ -1,0 +1,22 @@
+{
+  "test_id": "X2",
+  "shape": "internal InboundEmail (adapter output), not a provider webhook",
+  "provider_email_id": "test-email-X2",
+  "attachment_id": "test-att-X2-1",
+  "from": "kumarveg@mail.example",
+  "to": [
+    "invoices@inbound.spiceroute.example"
+  ],
+  "subject": "Revised invoice INV-552",
+  "body_text": "Dear Sir/Madam,\n\nPlease find our revised invoice attached.\n\nRegards",
+  "is_reply_with_token": false,
+  "token_placeholder": null,
+  "token_note": null,
+  "attachments": [
+    {
+      "filename": "X2_Kumar_INV-552_REVISED_no_token.pdf",
+      "path": "invoices/X2_Kumar_INV-552_REVISED_no_token.pdf",
+      "content_type": "application/pdf"
+    }
+  ]
+}

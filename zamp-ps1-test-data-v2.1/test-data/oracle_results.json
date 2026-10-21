@@ -1,0 +1,319 @@
+[
+  {
+    "test_id": "S1",
+    "state": "CLEARED",
+    "blocking": [],
+    "codes": [],
+    "info": [
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO PO-1001: mapped pre-tax 16000.00 + consumed 0 vs cap 16320.0000"
+    ],
+    "po": "PO-1001",
+    "pass_": true,
+    "detail": "oracle: CLEARED blocking=[] info=['PRICE_WITHIN_TOLERANCE'] | due 2026-11-11"
+  },
+  {
+    "test_id": "S2",
+    "state": "ON_HOLD",
+    "blocking": [
+      "BANK_DETAILS_CHANGED"
+    ],
+    "codes": [
+      "BANK_DETAILS_CHANGED"
+    ],
+    "info": [
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO PO-1002: mapped pre-tax 15600.00 + consumed 0 vs cap 15912.0000"
+    ],
+    "po": "PO-1002",
+    "pass_": true,
+    "detail": "oracle: ON_HOLD blocking=['BANK_DETAILS_CHANGED'] info=['PRICE_WITHIN_TOLERANCE']"
+  },
+  {
+    "test_id": "S3",
+    "state": "ON_HOLD",
+    "blocking": [
+      "PRICE_OVER_TOLERANCE"
+    ],
+    "codes": [
+      "PRICE_OVER_TOLERANCE"
+    ],
+    "info": [
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO PO-7731: mapped pre-tax 10200.00 + consumed 0 vs cap 10200.0000"
+    ],
+    "po": "PO-7731",
+    "pass_": true,
+    "detail": "oracle: ON_HOLD blocking=['PRICE_OVER_TOLERANCE'] info=['PRICE_WITHIN_TOLERANCE']"
+  },
+  {
+    "test_id": "S4",
+    "state": "CLEARED",
+    "blocking": [],
+    "codes": [],
+    "info": [
+      "CORRECTION_OF",
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO PO-7731: mapped pre-tax 10000.00 + consumed 0 vs cap 10200.0000"
+    ],
+    "po": "PO-7731",
+    "pass_": true,
+    "detail": "oracle: CLEARED blocking=[] info=['CORRECTION_OF', 'PRICE_WITHIN_TOLERANCE'] | S3:SUPERSEDED [SUPERSEDED]"
+  },
+  {
+    "test_id": "S5",
+    "state": "REJECTED",
+    "blocking": [
+      "DUPLICATE_INVOICE"
+    ],
+    "codes": [
+      "DUPLICATE_INVOICE"
+    ],
+    "info": [],
+    "notes": [],
+    "po": null,
+    "pass_": true,
+    "detail": "oracle: REJECTED blocking=['DUPLICATE_INVOICE'] info=[]"
+  },
+  {
+    "test_id": "S6a",
+    "state": "CLEARED",
+    "blocking": [],
+    "codes": [],
+    "info": [
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO PO-1003: mapped pre-tax 30000.00 + consumed 0 vs cap 51000.0000"
+    ],
+    "po": "PO-1003",
+    "pass_": true,
+    "detail": "oracle: CLEARED blocking=[] info=['PRICE_WITHIN_TOLERANCE'] | PO-1003:consumed_qty=15 [15]"
+  },
+  {
+    "test_id": "S6b",
+    "state": "ON_HOLD",
+    "blocking": [
+      "PO_AMOUNT_EXCEEDED",
+      "QTY_EXCEEDS_PO"
+    ],
+    "codes": [
+      "QTY_EXCEEDS_PO",
+      "PO_AMOUNT_EXCEEDED"
+    ],
+    "info": [
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO PO-1003: mapped pre-tax 24000.00 + consumed 30000.00 vs cap 51000.0000"
+    ],
+    "po": "PO-1003",
+    "pass_": true,
+    "detail": "oracle: ON_HOLD blocking=['PO_AMOUNT_EXCEEDED', 'QTY_EXCEEDS_PO'] info=['PRICE_WITHIN_TOLERANCE']"
+  },
+  {
+    "test_id": "S7",
+    "state": "ON_HOLD",
+    "blocking": [
+      "SCAN_UNVERIFIED"
+    ],
+    "codes": [
+      "SCAN_UNVERIFIED"
+    ],
+    "info": [
+      "PO_INFERRED",
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO inferred: PO-1004 (open: PO-1004, PO-1007)",
+      "PO PO-1004: mapped pre-tax 8700.00 + consumed 0 vs cap 8874.0000"
+    ],
+    "po": "PO-1004",
+    "pass_": true,
+    "detail": "oracle: ON_HOLD blocking=['SCAN_UNVERIFIED'] info=['PO_INFERRED', 'PRICE_WITHIN_TOLERANCE'] | PO used PO-1004; open POs considered ['PO-1004', 'PO-1007']"
+  },
+  {
+    "test_id": "S8",
+    "state": "ON_HOLD",
+    "blocking": [
+      "SENDER_UNVERIFIED",
+      "VENDOR_UNKNOWN"
+    ],
+    "codes": [
+      "VENDOR_UNKNOWN",
+      "SENDER_UNVERIFIED"
+    ],
+    "info": [],
+    "notes": [
+      "D, P, M, C and K4 not evaluated (vendor unknown)"
+    ],
+    "po": null,
+    "pass_": true,
+    "detail": "oracle: ON_HOLD blocking=['SENDER_UNVERIFIED', 'VENDOR_UNKNOWN'] info=[]"
+  },
+  {
+    "test_id": "S9",
+    "state": "SKIPPED",
+    "blocking": [
+      "NOT_INVOICE"
+    ],
+    "codes": [
+      "NOT_INVOICE"
+    ],
+    "info": [],
+    "notes": [],
+    "po": null,
+    "pass_": true,
+    "detail": "oracle: SKIPPED blocking=['NOT_INVOICE'] info=[]"
+  },
+  {
+    "test_id": "S10",
+    "state": "ON_HOLD",
+    "blocking": [
+      "ARITHMETIC_MISMATCH"
+    ],
+    "codes": [
+      "ARITHMETIC_MISMATCH"
+    ],
+    "info": [
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO PO-1006: mapped pre-tax 9300.00 + consumed 0 vs cap 9486.0000"
+    ],
+    "po": "PO-1006",
+    "pass_": true,
+    "detail": "oracle: ON_HOLD blocking=['ARITHMETIC_MISMATCH'] info=['PRICE_WITHIN_TOLERANCE']"
+  },
+  {
+    "test_id": "S11",
+    "state": "CLEARED",
+    "blocking": [],
+    "codes": [],
+    "info": [
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO PO-1005: mapped pre-tax 6090.000 + consumed 0 vs cap 6120.0000"
+    ],
+    "po": "PO-1005",
+    "pass_": true,
+    "detail": "oracle: CLEARED blocking=[] info=['PRICE_WITHIN_TOLERANCE'] | PO-1005:consumed_qty=2000 [2000]"
+  },
+  {
+    "test_id": "S12",
+    "state": "ON_HOLD",
+    "blocking": [
+      "BUNDLED_QUANTITY_UNVERIFIED"
+    ],
+    "codes": [
+      "BUNDLED_QUANTITY_UNVERIFIED"
+    ],
+    "info": [],
+    "notes": [
+      "bundled line 9000.00 vs PO remaining 9000.00",
+      "PO PO-1007: mapped pre-tax 0 + consumed 0 vs cap 9180.0000"
+    ],
+    "po": "PO-1007",
+    "pass_": true,
+    "detail": "oracle: ON_HOLD blocking=['BUNDLED_QUANTITY_UNVERIFIED'] info=[]"
+  },
+  {
+    "test_id": "S13",
+    "state": "CLEARED",
+    "blocking": [],
+    "codes": [],
+    "info": [
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO PO-1008: mapped pre-tax 5200 + consumed 0 vs cap 5304.0000"
+    ],
+    "po": "PO-1008",
+    "pass_": true,
+    "detail": "oracle: CLEARED blocking=[] info=['PRICE_WITHIN_TOLERANCE']"
+  },
+  {
+    "test_id": "S14",
+    "state": "CLEARED",
+    "blocking": [],
+    "codes": [],
+    "info": [
+      "LINE_MAPPED_AI_VERIFIED",
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO PO-1009: mapped pre-tax 13000.00 + consumed 0 vs cap 13260.0000"
+    ],
+    "po": "PO-1009",
+    "pass_": true,
+    "detail": "oracle: CLEARED blocking=[] info=['LINE_MAPPED_AI_VERIFIED', 'PRICE_WITHIN_TOLERANCE']"
+  },
+  {
+    "test_id": "X1",
+    "state": "ON_HOLD",
+    "blocking": [
+      "PRICE_OVER_TOLERANCE"
+    ],
+    "codes": [
+      "PRICE_OVER_TOLERANCE"
+    ],
+    "info": [
+      "CORRECTION_CANDIDATE_OF",
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO PO-7731: mapped pre-tax 10100.00 + consumed 0 vs cap 10200.0000"
+    ],
+    "po": "PO-7731",
+    "pass_": true,
+    "detail": "oracle: ON_HOLD blocking=['PRICE_OVER_TOLERANCE'] info=['CORRECTION_CANDIDATE_OF', 'PRICE_WITHIN_TOLERANCE'] | S3:AWAITING_VENDOR->ON_HOLD [AWAITING_VENDOR->ON_HOLD]; S3:not SUPERSEDED [ON_HOLD]"
+  },
+  {
+    "test_id": "X2",
+    "state": "ON_HOLD",
+    "blocking": [
+      "CORRECTION_UNCONFIRMED"
+    ],
+    "codes": [
+      "CORRECTION_UNCONFIRMED"
+    ],
+    "info": [
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "PO PO-7731: mapped pre-tax 10000.00 + consumed 0 vs cap 10200.0000"
+    ],
+    "po": "PO-7731",
+    "pass_": true,
+    "detail": "oracle: ON_HOLD blocking=['CORRECTION_UNCONFIRMED'] info=['PRICE_WITHIN_TOLERANCE'] | S3:unchanged ON_HOLD [ON_HOLD->ON_HOLD]"
+  },
+  {
+    "test_id": "X3",
+    "state": "ON_HOLD",
+    "blocking": [
+      "UNAPPROVED_CHARGE"
+    ],
+    "codes": [
+      "UNAPPROVED_CHARGE"
+    ],
+    "info": [
+      "PRICE_WITHIN_TOLERANCE"
+    ],
+    "notes": [
+      "charge keyword ['delivery'] on 'Delivery charges', PO has no charge line",
+      "PO PO-1006: mapped pre-tax 9300.00 + consumed 0 vs cap 9486.0000"
+    ],
+    "po": "PO-1006",
+    "pass_": true,
+    "detail": "oracle: ON_HOLD blocking=['UNAPPROVED_CHARGE'] info=['PRICE_WITHIN_TOLERANCE']"
+  }
+]

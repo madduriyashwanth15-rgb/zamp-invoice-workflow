@@ -1,0 +1,3 @@
+item_code,description,base_uom,pack_uom,pack_size
+CONT-500,Food container 500 ml,pcs,pack,50
+BAG-M,Carry bag medium,pcs,bundle,100

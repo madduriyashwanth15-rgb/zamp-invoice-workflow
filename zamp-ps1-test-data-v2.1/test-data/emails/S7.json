@@ -1,0 +1,22 @@
+{
+  "test_id": "S7",
+  "shape": "internal InboundEmail (adapter output), not a provider webhook",
+  "provider_email_id": "test-email-S7",
+  "attachment_id": "test-att-S7-1",
+  "from": "service@sharmakitchen.example",
+  "to": [
+    "invoices@inbound.spiceroute.example"
+  ],
+  "subject": "Invoice SKE-119",
+  "body_text": "Dear Sir/Madam,\n\nPlease find the attached invoice.\n\nRegards",
+  "is_reply_with_token": false,
+  "token_placeholder": null,
+  "token_note": null,
+  "attachments": [
+    {
+      "filename": "S07_Sharma_SKE-119_SCANNED.pdf",
+      "path": "invoices/S07_Sharma_SKE-119_SCANNED.pdf",
+      "content_type": "application/pdf"
+    }
+  ]
+}

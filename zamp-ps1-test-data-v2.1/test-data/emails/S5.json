@@ -1,0 +1,22 @@
+{
+  "test_id": "S5",
+  "shape": "internal InboundEmail (adapter output), not a provider webhook",
+  "provider_email_id": "test-email-S5",
+  "attachment_id": "test-att-S5-1",
+  "from": "billing@freshpack.example",
+  "to": [
+    "invoices@inbound.spiceroute.example"
+  ],
+  "subject": "Invoice FP/2026/418",
+  "body_text": "Dear Sir/Madam,\n\nPlease find the attached invoice.\n\nRegards",
+  "is_reply_with_token": false,
+  "token_placeholder": null,
+  "token_note": null,
+  "attachments": [
+    {
+      "filename": "S05_FreshPack_FP-2026-418_reprint.pdf",
+      "path": "invoices/S05_FreshPack_FP-2026-418_reprint.pdf",
+      "content_type": "application/pdf"
+    }
+  ]
+}

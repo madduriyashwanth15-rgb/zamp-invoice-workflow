@@ -1,0 +1,22 @@
+{
+  "test_id": "S9",
+  "shape": "internal InboundEmail (adapter output), not a provider webhook",
+  "provider_email_id": "test-email-S9",
+  "attachment_id": "test-att-S9-1",
+  "from": "billing@freshpack.example",
+  "to": [
+    "invoices@inbound.spiceroute.example"
+  ],
+  "subject": "Quotation Q-2026-77 for containers and bags",
+  "body_text": "Dear Sir/Madam,\n\nPlease find our quotation attached for your review.\n\nRegards",
+  "is_reply_with_token": false,
+  "token_placeholder": null,
+  "token_note": null,
+  "attachments": [
+    {
+      "filename": "S09_FreshPack_Q-2026-77_QUOTATION.pdf",
+      "path": "invoices/S09_FreshPack_Q-2026-77_QUOTATION.pdf",
+      "content_type": "application/pdf"
+    }
+  ]
+}

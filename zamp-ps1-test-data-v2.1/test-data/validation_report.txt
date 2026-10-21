@@ -1,0 +1,298 @@
+
+## 1 Reference data
+[PASS] 6 vendors V01-V06 present  -- ['V01', 'V02', 'V03', 'V04', 'V05', 'V06']
+[PASS] V01 matches matrix (name, GSTIN, bank last-4, terms)  -- FreshPack Packaging Pvt Ltd | 29AAFCF1234K1Z5 | 4417 | 30
+[PASS] V02 matches matrix (name, GSTIN, bank last-4, terms)  -- CleanCo Hygiene Supplies | 29AAGCC5678M1Z2 | 2290 | 30
+[PASS] V03 matches matrix (name, GSTIN, bank last-4, terms)  -- Kumar Vegetables |  | 7781 | 7
+[PASS] V04 matches matrix (name, GSTIN, bank last-4, terms)  -- BlueFlame Gas Supplies | 29AABCB4321P1Z8 | 5530 | 15
+[PASS] V05 matches matrix (name, GSTIN, bank last-4, terms)  -- Sharma Kitchen Equipment | 29ABHPS9876Q1Z3 | 1188 | 30
+[PASS] V06 matches matrix (name, GSTIN, bank last-4, terms)  -- UrbanLinen Services | 29AAECU2468R1Z6 | 3365 | 15
+[PASS] QuickServe not in vendor master
+[PASS] catalog pack sizes (CONT-500=50, BAG-M=100)
+[PASS] 10 POs present  -- ['PO-1001', 'PO-1002', 'PO-1003', 'PO-1004', 'PO-1005', 'PO-1006', 'PO-1007', 'PO-1008', 'PO-1009', 'PO-7731']
+[PASS] PO-1001: vendor, subtotal 16000, GST rate, no charge line  -- calc=16000.00 rates={'0.18'}
+[PASS] PO-1002: vendor, subtotal 15600, GST rate, no charge line  -- calc=15600.00 rates={'0.18'}
+[PASS] PO-7731: vendor, subtotal 10000, GST rate, no charge line  -- calc=10000.00 rates={'0'}
+[PASS] PO-1003: vendor, subtotal 50000, GST rate, no charge line  -- calc=50000.00 rates={'0.18'}
+[PASS] PO-1004: vendor, subtotal 8700, GST rate, no charge line  -- calc=8700.00 rates={'0.18'}
+[PASS] PO-1005: vendor, subtotal 6000, GST rate, no charge line  -- calc=6000.00 rates={'0.18'}
+[PASS] PO-1006: vendor, subtotal 9300, GST rate, no charge line  -- calc=9300.00 rates={'0.18'}
+[PASS] PO-1007: vendor, subtotal 9000, GST rate, no charge line  -- calc=9000.00 rates={'0.18'}
+[PASS] PO-1008: vendor, subtotal 5200, GST rate, no charge line  -- calc=5200.00 rates={'0.18'}
+[PASS] PO-1009: vendor, subtotal 13000, GST rate, no charge line  -- calc=13000.00 rates={'0.18'}
+[PASS] settings: price tolerance 2%, qty tolerance 0, rounding Rs 1, limit 2,00,000
+[PASS] lump-sum markers = spec M5 v1.2.2 (phrases 'lump sum', 'lumpsum'; unit LS)  -- {'phrases': ['lump sum', 'lumpsum'], 'units': ['LS']}
+[PASS] charge keyword list = spec M7 list
+
+## 2 Fictional data
+[PASS] every email address uses the reserved .example TLD  -- accounts@cleanco.example, ap-forwarder@spiceroute.example, billing@blueflame.example, billing@freshpack.example, billing@quickserve.example, billing@urbanlinen.example, invoices@inbound.spiceroute.example, kumarveg@mail.example, service@sharmakitchen.example
+[PASS] every IFSC uses fictional bank code EXMP
+[PASS] every bank name and address is marked 'Example'
+[PASS] phone numbers use invalid subscriber prefix 0 (cannot ring a real line)
+[PASS] V01 GSTIN well-formed and embeds the vendor PAN  -- 29AAFCF1234K1Z5
+[PASS] V02 GSTIN well-formed and embeds the vendor PAN  -- 29AAGCC5678M1Z2
+[PASS] V04 GSTIN well-formed and embeds the vendor PAN  -- 29AABCB4321P1Z8
+[PASS] V05 GSTIN well-formed and embeds the vendor PAN  -- 29ABHPS9876Q1Z3
+[PASS] V06 GSTIN well-formed and embeds the vendor PAN  -- 29AAECU2468R1Z6
+[PASS] GSTIN checksum report (informational: invalid checksum = cannot be a real registration)  -- V01: format=ok pan=ok checksum=invalid; V02: format=ok pan=ok checksum=invalid; V03: no GSTIN; V04: format=ok pan=ok checksum=invalid; V05: format=ok pan=ok checksum=invalid; V06: format=ok pan=ok checksum=invalid
+
+## 3 PDFs and evidence
+[PASS] exactly 18 PDFs (S1-S14 incl. S6a/S6b, X1-X3)  -- 18
+[PASS] S1: file exists  -- invoices/S01_FreshPack_FP-2026-0418.pdf
+[PASS] S1: 1 page, <= 4 MB  -- 3141 bytes
+[PASS] S1: text layer present as expected  -- 1027 chars
+[PASS] S1: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 8 values found
+[PASS] S1: title 'TAX INVOICE' and label 'Invoice No.' in text
+[PASS] S1: fictional-document footer printed
+[PASS] S2: file exists  -- invoices/S02_CleanCo_CC-7781.pdf
+[PASS] S2: 1 page, <= 4 MB  -- 3141 bytes
+[PASS] S2: text layer present as expected  -- 931 chars
+[PASS] S2: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 8 values found
+[PASS] S2: title 'TAX INVOICE' and label 'Invoice #' in text
+[PASS] S2: fictional-document footer printed
+[PASS] S3: file exists  -- invoices/S03_Kumar_INV-552.pdf
+[PASS] S3: 1 page, <= 4 MB  -- 3127 bytes
+[PASS] S3: text layer present as expected  -- 737 chars
+[PASS] S3: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 8 values found
+[PASS] S3: title 'INVOICE' and label 'Bill No.' in text
+[PASS] S3: fictional-document footer printed
+[PASS] S4: file exists  -- invoices/S04_Kumar_INV-552_REVISED.pdf
+[PASS] S4: 1 page, <= 4 MB  -- 3259 bytes
+[PASS] S4: text layer present as expected  -- 787 chars
+[PASS] S4: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 8 values found
+[PASS] S4: title 'INVOICE' and label 'Bill No.' in text
+[PASS] S4: 'REVISED' marker printed
+[PASS] S4: fictional-document footer printed
+[PASS] S5: file exists  -- invoices/S05_FreshPack_FP-2026-418_reprint.pdf
+[PASS] S5: 1 page, <= 4 MB  -- 3172 bytes
+[PASS] S5: text layer present as expected  -- 1059 chars
+[PASS] S5: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 8 values found
+[PASS] S5: title 'TAX INVOICE' and label 'Invoice No.' in text
+[PASS] S5: fictional-document footer printed
+[PASS] S6a: file exists  -- invoices/S06a_BlueFlame_BF-3301.pdf
+[PASS] S6a: 1 page, <= 4 MB  -- 3058 bytes
+[PASS] S6a: text layer present as expected  -- 950 chars
+[PASS] S6a: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 6 values found
+[PASS] S6a: title 'TAX INVOICE' and label 'Invoice No.' in text
+[PASS] S6a: fictional-document footer printed
+[PASS] S6b: file exists  -- invoices/S06b_BlueFlame_BF-3342.pdf
+[PASS] S6b: 1 page, <= 4 MB  -- 3067 bytes
+[PASS] S6b: text layer present as expected  -- 959 chars
+[PASS] S6b: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 6 values found
+[PASS] S6b: title 'TAX INVOICE' and label 'Invoice No.' in text
+[PASS] S6b: fictional-document footer printed
+[PASS] S7: file exists  -- invoices/S07_Sharma_SKE-119_SCANNED.pdf
+[PASS] S7: 1 page, <= 4 MB  -- 329411 bytes
+[PASS] S7: text layer absent as expected  -- 0 chars
+[PASS] S7: image-only page (no fonts)
+[PASS] S8: file exists  -- invoices/S08_QuickServe_QS-55.pdf
+[PASS] S8: 1 page, <= 4 MB  -- 3009 bytes
+[PASS] S8: text layer present as expected  -- 829 chars
+[PASS] S8: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 6 values found
+[PASS] S8: title 'TAX INVOICE' and label 'Invoice #' in text
+[PASS] S8: fictional-document footer printed
+[PASS] S9: file exists  -- invoices/S09_FreshPack_Q-2026-77_QUOTATION.pdf
+[PASS] S9: 1 page, <= 4 MB  -- 3062 bytes
+[PASS] S9: text layer present as expected  -- 929 chars
+[PASS] S9: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 6 values found
+[PASS] S9: title 'QUOTATION' and label 'Quote No.' in text
+[PASS] S9: fictional-document footer printed
+[PASS] S10: file exists  -- invoices/S10_CleanCo_CC-7790.pdf
+[PASS] S10: 1 page, <= 4 MB  -- 3157 bytes
+[PASS] S10: text layer present as expected  -- 932 chars
+[PASS] S10: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 8 values found
+[PASS] S10: title 'TAX INVOICE' and label 'Invoice #' in text
+[PASS] S10: fictional-document footer printed
+[PASS] S11: file exists  -- invoices/S11_FreshPack_FP-2026-0431.pdf
+[PASS] S11: 1 page, <= 4 MB  -- 3071 bytes
+[PASS] S11: text layer present as expected  -- 972 chars
+[PASS] S11: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 6 values found
+[PASS] S11: title 'TAX INVOICE' and label 'Invoice No.' in text
+[PASS] S11: fictional-document footer printed
+[PASS] S12: file exists  -- invoices/S12_Sharma_SKE-127_LUMPSUM.pdf
+[PASS] S12: 1 page, <= 4 MB  -- 3057 bytes
+[PASS] S12: text layer present as expected  -- 948 chars
+[PASS] S12: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 6 values found
+[PASS] S12: title 'TAX INVOICE' and label 'Invoice No.' in text
+[PASS] S12: fictional-document footer printed
+[PASS] S13: file exists  -- invoices/S13_UrbanLinen_UL-882_INCLUSIVE.pdf
+[PASS] S13: 1 page, <= 4 MB  -- 3294 bytes
+[PASS] S13: text layer present as expected  -- 913 chars
+[PASS] S13: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 8 values found
+[PASS] S13: title 'TAX INVOICE' and label 'Invoice No.' in text
+[PASS] S13: fictional-document footer printed
+[PASS] S14: file exists  -- invoices/S14_FreshPack_FP-2026-0440_PACKS.pdf
+[PASS] S14: 1 page, <= 4 MB  -- 3059 bytes
+[PASS] S14: text layer present as expected  -- 965 chars
+[PASS] S14: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 6 values found
+[PASS] S14: title 'TAX INVOICE' and label 'Invoice No.' in text
+[PASS] S14: fictional-document footer printed
+[PASS] X1: file exists  -- invoices/X1_Kumar_INV-552_REVISED_still_high.pdf
+[PASS] X1: 1 page, <= 4 MB  -- 3257 bytes
+[PASS] X1: text layer present as expected  -- 776 chars
+[PASS] X1: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 8 values found
+[PASS] X1: title 'INVOICE' and label 'Bill No.' in text
+[PASS] X1: 'REVISED' marker printed
+[PASS] X1: fictional-document footer printed
+[PASS] X2: file exists  -- invoices/X2_Kumar_INV-552_REVISED_no_token.pdf
+[PASS] X2: 1 page, <= 4 MB  -- 3247 bytes
+[PASS] X2: text layer present as expected  -- 770 chars
+[PASS] X2: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 8 values found
+[PASS] X2: title 'INVOICE' and label 'Bill No.' in text
+[PASS] X2: 'REVISED' marker printed
+[PASS] X2: fictional-document footer printed
+[PASS] X3: file exists  -- invoices/X3_CleanCo_CC-7795_DELIVERY.pdf
+[PASS] X3: 1 page, <= 4 MB  -- 3238 bytes
+[PASS] X3: text layer present as expected  -- 974 chars
+[PASS] X3: number, total, PO ref, bank last-4, line rates/amounts all in text layer  -- 10 values found
+[PASS] X3: title 'TAX INVOICE' and label 'Invoice #' in text
+[PASS] X3: fictional-document footer printed
+[PASS] S9: the word 'invoice' appears nowhere in the document text
+
+## 4 Arithmetic and matrix figures
+[PASS] S1: arithmetic consistent  -- lines=True parts=True total=True basis=exclusive
+[PASS] S1: number, PO ref and totals equal the matrix figures  -- FP-2026-0418 total=18880.00
+[PASS] S1: answer-key expectation equals the matrix  -- CLEARED [] ['PRICE_WITHIN_TOLERANCE']
+[PASS] S2: arithmetic consistent  -- lines=True parts=True total=True basis=exclusive
+[PASS] S2: number, PO ref and totals equal the matrix figures  -- CC-7781 total=18408.00
+[PASS] S2: answer-key expectation equals the matrix  -- ON_HOLD ['BANK_DETAILS_CHANGED'] ['PRICE_WITHIN_TOLERANCE']
+[PASS] S3: arithmetic consistent  -- lines=True parts=True total=True basis=none
+[PASS] S3: number, PO ref and totals equal the matrix figures  -- INV-552 total=10200.00
+[PASS] S3: answer-key expectation equals the matrix  -- ON_HOLD ['PRICE_OVER_TOLERANCE'] []
+[PASS] S4: arithmetic consistent  -- lines=True parts=True total=True basis=none
+[PASS] S4: number, PO ref and totals equal the matrix figures  -- INV-552 total=10000.00
+[PASS] S4: answer-key expectation equals the matrix  -- CLEARED [] ['CORRECTION_OF']
+[PASS] S5: arithmetic consistent  -- lines=True parts=True total=True basis=exclusive
+[PASS] S5: number, PO ref and totals equal the matrix figures  -- FP/2026/418 total=18880.00
+[PASS] S5: answer-key expectation equals the matrix  -- REJECTED ['DUPLICATE_INVOICE'] []
+[PASS] S6a: arithmetic consistent  -- lines=True parts=True total=True basis=exclusive
+[PASS] S6a: number, PO ref and totals equal the matrix figures  -- BF-3301 total=35400.00
+[PASS] S6a: answer-key expectation equals the matrix  -- CLEARED [] ['PRICE_WITHIN_TOLERANCE']
+[PASS] S6b: arithmetic consistent  -- lines=True parts=True total=True basis=exclusive
+[PASS] S6b: number, PO ref and totals equal the matrix figures  -- BF-3342 total=28320.00
+[PASS] S6b: answer-key expectation equals the matrix  -- ON_HOLD ['QTY_EXCEEDS_PO', 'PO_AMOUNT_EXCEEDED'] []
+[PASS] S7: arithmetic consistent  -- lines=True parts=True total=True basis=exclusive
+[PASS] S7: number, PO ref and totals equal the matrix figures  -- SKE-119 total=10266.00
+[PASS] S7: answer-key expectation equals the matrix  -- ON_HOLD ['SCAN_UNVERIFIED'] ['PO_INFERRED']
+[PASS] S8: arithmetic consistent  -- lines=True parts=True total=True basis=exclusive
+[PASS] S8: number, PO ref and totals equal the matrix figures  -- QS-55 total=2950.00
+[PASS] S8: answer-key expectation equals the matrix  -- ON_HOLD ['VENDOR_UNKNOWN', 'SENDER_UNVERIFIED'] []
+[PASS] S9: arithmetic consistent  -- lines=True parts=True total=True basis=exclusive
+[PASS] S9: number, PO ref and totals equal the matrix figures  -- Q-2026-77 total=35164.00
+[PASS] S9: answer-key expectation equals the matrix  -- SKIPPED ['NOT_INVOICE'] []
+[PASS] S10: arithmetic inconsistent (intended)  -- lines=True parts=True total=False basis=exclusive
+[PASS] S10: number, PO ref and totals equal the matrix figures  -- CC-7790 total=11474.00
+[PASS] S10: answer-key expectation equals the matrix  -- ON_HOLD ['ARITHMETIC_MISMATCH'] []
+[PASS] S11: arithmetic consistent  -- lines=True parts=True total=True basis=exclusive
+[PASS] S11: number, PO ref and totals equal the matrix figures  -- FP-2026-0431 total=7186.20
+[PASS] S11: answer-key expectation equals the matrix  -- CLEARED [] ['PRICE_WITHIN_TOLERANCE']
+[PASS] S12: arithmetic consistent  -- lines=True parts=True total=True basis=exclusive
+[PASS] S12: number, PO ref and totals equal the matrix figures  -- SKE-127 total=10620.00
+[PASS] S12: answer-key expectation equals the matrix  -- ON_HOLD ['BUNDLED_QUANTITY_UNVERIFIED'] []
+[PASS] S13: arithmetic consistent  -- lines=True parts=True total=True basis=inclusive
+[PASS] S13: number, PO ref and totals equal the matrix figures  -- UL-882 total=6136.00
+[PASS] S13: answer-key expectation equals the matrix  -- CLEARED [] ['PRICE_WITHIN_TOLERANCE']
+[PASS] S14: arithmetic consistent  -- lines=True parts=True total=True basis=exclusive
+[PASS] S14: number, PO ref and totals equal the matrix figures  -- FP-2026-0440 total=15340.00
+[PASS] S14: answer-key expectation equals the matrix  -- CLEARED [] ['LINE_MAPPED_AI_VERIFIED', 'PRICE_WITHIN_TOLERANCE']
+[PASS] X1: arithmetic consistent  -- lines=True parts=True total=True basis=none
+[PASS] X1: number, PO ref and totals equal the matrix figures  -- INV-552 total=10100.00
+[PASS] X1: answer-key expectation equals the matrix  -- ON_HOLD ['PRICE_OVER_TOLERANCE'] ['CORRECTION_CANDIDATE_OF']
+[PASS] X2: arithmetic consistent  -- lines=True parts=True total=True basis=none
+[PASS] X2: number, PO ref and totals equal the matrix figures  -- INV-552 total=10000.00
+[PASS] X2: answer-key expectation equals the matrix  -- ON_HOLD ['CORRECTION_UNCONFIRMED'] []
+[PASS] X3: arithmetic consistent  -- lines=True parts=True total=True basis=exclusive
+[PASS] X3: number, PO ref and totals equal the matrix figures  -- CC-7795 total=11564.00
+[PASS] X3: answer-key expectation equals the matrix  -- ON_HOLD ['UNAPPROVED_CHARGE'] []
+
+## 5 Rule oracle
+[PASS] S1: email payload references its PDF
+[PASS] S2: email payload references its PDF
+[PASS] S3: email payload references its PDF
+[PASS] S4: email payload references its PDF and carries token placeholder
+[PASS] S5: email payload references its PDF
+[PASS] S6a: email payload references its PDF
+[PASS] S6b: email payload references its PDF
+[PASS] S7: email payload references its PDF
+[PASS] S8: email payload references its PDF
+[PASS] S9: email payload references its PDF
+[PASS] S10: email payload references its PDF
+[PASS] S11: email payload references its PDF
+[PASS] S12: email payload references its PDF
+[PASS] S13: email payload references its PDF
+[PASS] S14: email payload references its PDF
+[PASS] X1: email payload references its PDF and carries token placeholder
+[PASS] X2: email payload references its PDF
+[PASS] X3: email payload references its PDF
+[PASS] S1: oracle result matches expected  -- oracle: CLEARED blocking=[] info=['PRICE_WITHIN_TOLERANCE'] | due 2026-11-11
+[PASS] S2: oracle result matches expected  -- oracle: ON_HOLD blocking=['BANK_DETAILS_CHANGED'] info=['PRICE_WITHIN_TOLERANCE']
+[PASS] S3: oracle result matches expected  -- oracle: ON_HOLD blocking=['PRICE_OVER_TOLERANCE'] info=['PRICE_WITHIN_TOLERANCE']
+[PASS] S3: correction email step -> AWAITING_VENDOR, token R-1002
+[PASS] S4: oracle result matches expected  -- oracle: CLEARED blocking=[] info=['CORRECTION_OF', 'PRICE_WITHIN_TOLERANCE'] | S3:SUPERSEDED [SUPERSEDED]
+[PASS] S5: oracle result matches expected  -- oracle: REJECTED blocking=['DUPLICATE_INVOICE'] info=[]
+[PASS] S6a: oracle result matches expected  -- oracle: CLEARED blocking=[] info=['PRICE_WITHIN_TOLERANCE'] | PO-1003:consumed_qty=15 [15]
+[PASS] S6b: oracle result matches expected  -- oracle: ON_HOLD blocking=['PO_AMOUNT_EXCEEDED', 'QTY_EXCEEDS_PO'] info=['PRICE_WITHIN_TOLERANCE']
+[PASS] S7: oracle result matches expected  -- oracle: ON_HOLD blocking=['SCAN_UNVERIFIED'] info=['PO_INFERRED', 'PRICE_WITHIN_TOLERANCE'] | PO used PO-1004; open POs considered ['PO-1004', 'PO-1007']
+[PASS] S8: oracle result matches expected  -- oracle: ON_HOLD blocking=['SENDER_UNVERIFIED', 'VENDOR_UNKNOWN'] info=[]
+[PASS] S9: oracle result matches expected  -- oracle: SKIPPED blocking=['NOT_INVOICE'] info=[]
+[PASS] S10: oracle result matches expected  -- oracle: ON_HOLD blocking=['ARITHMETIC_MISMATCH'] info=['PRICE_WITHIN_TOLERANCE']
+[PASS] S11: oracle result matches expected  -- oracle: CLEARED blocking=[] info=['PRICE_WITHIN_TOLERANCE'] | PO-1005:consumed_qty=2000 [2000]
+[PASS] S12: oracle result matches expected  -- oracle: ON_HOLD blocking=['BUNDLED_QUANTITY_UNVERIFIED'] info=[]
+[PASS] S13: oracle result matches expected  -- oracle: CLEARED blocking=[] info=['PRICE_WITHIN_TOLERANCE']
+[PASS] S14: oracle result matches expected  -- oracle: CLEARED blocking=[] info=['LINE_MAPPED_AI_VERIFIED', 'PRICE_WITHIN_TOLERANCE']
+[PASS] X1: oracle result matches expected  -- oracle: ON_HOLD blocking=['PRICE_OVER_TOLERANCE'] info=['CORRECTION_CANDIDATE_OF', 'PRICE_WITHIN_TOLERANCE'] | S3:AWAITING_VENDOR->ON_HOLD [AWAITING_VENDOR->ON_HOLD]; S3:not SUPERSEDED [ON_HOLD]
+[PASS] X2: oracle result matches expected  -- oracle: ON_HOLD blocking=['CORRECTION_UNCONFIRMED'] info=['PRICE_WITHIN_TOLERANCE'] | S3:unchanged ON_HOLD [ON_HOLD->ON_HOLD]
+[PASS] X3: oracle result matches expected  -- oracle: ON_HOLD blocking=['UNAPPROVED_CHARGE'] info=['PRICE_WITHIN_TOLERANCE']
+
+## 6 Oracle sensitivity (mutations)
+[PASS] without AI mapping (matrix footnote *), S14 -> ON_HOLD LINE_UNMAPPED  -- ON_HOLD ['LINE_UNMAPPED']
+[PASS] S4 without token (matrix footnote **) -> ON_HOLD CORRECTION_UNCONFIRMED  -- ON_HOLD ['CORRECTION_UNCONFIRMED']
+[PASS] S4 token from unregistered sender does not link (ON_HOLD, CORRECTION_UNCONFIRMED)  -- ON_HOLD ['SENDER_UNVERIFIED', 'CORRECTION_UNCONFIRMED']
+[PASS] S11 price 3.0603 (+2.01%) -> PRICE_OVER_TOLERANCE (C1 boundary)  -- ON_HOLD ['ARITHMETIC_MISMATCH', 'PRICE_OVER_TOLERANCE', 'PO_AMOUNT_EXCEEDED']
+
+## 7 Lump-sum rule (M5) regression
+[PASS] detect('Exhaust hood and duct cleaning as per PO-1007 (lump sum)', unit LS) = True  [S12 line: marker phrase + LS unit]  -- got True
+[PASS] detect('Annual kitchen maintenance - Lump-Sum', unit job) = True  [hyphenated marker]  -- got True
+[PASS] detect('Hood cleaning LUMPSUM', unit job) = True  [one-word marker, upper case]  -- got True
+[PASS] detect('Kitchen deep clean', unit LS) = True  [LS unit alone]  -- got True
+[PASS] detect('LPG cylinder 19 kg commercial (refill) as per PO-1003', unit cyl) = False  [ordinary line citing a PO number]  -- got False
+[PASS] detect('Food container 500 ml - PO-1001 line 1', unit pcs) = False  [ordinary line citing PO and line number]  -- got False
+[PASS] detect('Exhaust hood and duct cleaning as per PO-1007', unit job) = False  [multi-service wording + PO number, no marker]  -- got False
+[PASS] detect('Carry bag medium - bundle of 100', unit bundle) = False  [catalog pack wording ('bundle') is not a marker]  -- got False
+[PASS] detect('Duct cleaning', unit job) = False  [plain service line]  -- got False
+[PASS] S6a line 'as per PO-1003' still maps normally: CLEARED, consumes 15, no lump-sum code  -- oracle: CLEARED blocking=[] info=['PRICE_WITHIN_TOLERANCE'] | PO-1003:consumed_qty=15 [15]
+[PASS] ...and S6b downstream is unchanged (QTY_EXCEEDS_PO, PO_AMOUNT_EXCEEDED)  -- oracle: ON_HOLD blocking=['PO_AMOUNT_EXCEEDED', 'QTY_EXCEEDS_PO'] info=['PRICE_WITHIN_TOLERANCE']
+[PASS] S1 line '- PO-1001' still maps normally: CLEARED  -- oracle: CLEARED blocking=[] info=['PRICE_WITHIN_TOLERANCE'] | due 2026-11-11
+[PASS] S12 as generated: ON_HOLD BUNDLED_QUANTITY_UNVERIFIED  -- oracle: ON_HOLD blocking=['BUNDLED_QUANTITY_UNVERIFIED'] info=[]
+[PASS] ordering is load-bearing: with M1 first, S12 would differ (so S12 catches a wrong order)  -- M1-first result: ON_HOLD ['UOM_UNSUPPORTED']
+[PASS] S12 wording without a marker: not lump-sum, still ON_HOLD (fail safe), never CLEARED  -- ON_HOLD ['PRICE_OVER_TOLERANCE']
+
+## 8 S7 scan: intended hold, PO inference, extraction errors not accepted
+[PASS] S7 answer key declares PO-1004 inferred from open {PO-1004, PO-1007} and lists critical fields  -- 19 fields
+[PASS] S7 has no PO reference in the ground truth
+[PASS] correct extraction: S7 passes (SCAN_UNVERIFIED only, PO_INFERRED -> PO-1004, 0 field diffs)  -- oracle: ON_HOLD blocking=['SCAN_UNVERIFIED'] info=['PO_INFERRED', 'PRICE_WITHIN_TOLERANCE'] | PO used PO-1004; open POs considered ['PO-1004', 'PO-1007'] | field diffs: 0
+[PASS] misread rejected, not silently accepted: GSTIN Q read as 0 (29ABHPS987601Z3)  -- outcome check fails (ON_HOLD ['SCAN_UNVERIFIED', 'VENDOR_GSTIN_MISMATCH']) and field check fails (vendor_gstin: got '29ABHPS987601Z3', expected '29ABHPS9876Q1Z3')
+[PASS] misread rejected, not silently accepted: unit 'pcs' read as 'pes'  -- outcome check fails (ON_HOLD ['SCAN_UNVERIFIED', 'UOM_UNSUPPORTED']) and field check fails (line 2 uom: got 'pes', expected 'pcs')
+[PASS] misread rejected, not silently accepted: line 1 amount 6,000 read as 6,800  -- outcome check fails (ON_HOLD ['ARITHMETIC_MISMATCH', 'SCAN_UNVERIFIED']) and field check fails (line 1 amount: got '6800.00', expected '6000.00')
+[PASS] misread rejected, not silently accepted: PO reference hallucinated (PO-1007)  -- outcome check fails (ON_HOLD ['LINE_UNMAPPED', 'SCAN_UNVERIFIED']) and field check fails (po_reference: got 'PO-1007', expected None)
+[PASS] misread rejected, not silently accepted: date 15/10 read as 16/10 (no rule fires)  -- field check fails (invoice_date: got '2026-10-16', expected '2026-10-15')
+[PASS] misread rejected, not silently accepted: bank account last-4 1188 read as 1186  -- outcome check fails (ON_HOLD ['BANK_DETAILS_CHANGED', 'SCAN_UNVERIFIED']) and field check fails (bank_account_last4: got '1186', expected '1188')
+
+## 9 S7 scan legibility (tesseract proxy; not the production extractor)
+[PASS] vendor name: read correctly in 12/12 OCR configurations
+[PASS] title: read correctly in 12/12 OCR configurations
+[PASS] vendor GSTIN (exact): read correctly in 12/12 OCR configurations
+[PASS] invoice number: read correctly in 12/12 OCR configurations
+[PASS] date: read correctly in 12/12 OCR configurations
+[PASS] subtotal: read correctly in 12/12 OCR configurations
+[PASS] CGST: read correctly in 12/12 OCR configurations
+[PASS] SGST: read correctly in 12/12 OCR configurations
+[PASS] total: read correctly in 12/12 OCR configurations
+[PASS] bank account (last-4 1188): read correctly in 12/12 OCR configurations
+[PASS] no PO reference printed: read correctly in 12/12 OCR configurations
+[PASS] line 1 values present: read correctly in 12/12 OCR configurations
+[PASS] line 1 row integrity (desc, qty, unit, rate, amount on one row): read correctly in 8/8 OCR configurations
+[PASS] line 2 values present: read correctly in 12/12 OCR configurations
+[PASS] line 2 row integrity (desc, qty, unit, rate, amount on one row): read correctly in 8/8 OCR configurations
+
+TOTAL: 278 checks, 278 passed, 0 failed, 0 skipped

@@ -1,0 +1,22 @@
+{
+  "test_id": "S8",
+  "shape": "internal InboundEmail (adapter output), not a provider webhook",
+  "provider_email_id": "test-email-S8",
+  "attachment_id": "test-att-S8-1",
+  "from": "billing@quickserve.example",
+  "to": [
+    "invoices@inbound.spiceroute.example"
+  ],
+  "subject": "Invoice QS-55",
+  "body_text": "Dear Sir/Madam,\n\nPlease find the attached invoice.\n\nRegards",
+  "is_reply_with_token": false,
+  "token_placeholder": null,
+  "token_note": null,
+  "attachments": [
+    {
+      "filename": "S08_QuickServe_QS-55.pdf",
+      "path": "invoices/S08_QuickServe_QS-55.pdf",
+      "content_type": "application/pdf"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "test_id": "S10",
+  "shape": "internal InboundEmail (adapter output), not a provider webhook",
+  "provider_email_id": "test-email-S10",
+  "attachment_id": "test-att-S10-1",
+  "from": "accounts@cleanco.example",
+  "to": [
+    "invoices@inbound.spiceroute.example"
+  ],
+  "subject": "Invoice CC-7790",
+  "body_text": "Dear Sir/Madam,\n\nPlease find the attached invoice.\n\nRegards",
+  "is_reply_with_token": false,
+  "token_placeholder": null,
+  "token_note": null,
+  "attachments": [
+    {
+      "filename": "S10_CleanCo_CC-7790.pdf",
+      "path": "invoices/S10_CleanCo_CC-7790.pdf",
+      "content_type": "application/pdf"
+    }
+  ]
+}

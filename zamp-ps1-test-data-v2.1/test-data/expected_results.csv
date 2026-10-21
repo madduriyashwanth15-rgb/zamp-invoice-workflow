@@ -1,0 +1,19 @@
+test_id,group,order,file,path,sender,vendor_id,invoice_number,po_reference,printed_total,expected_outcome,expected_blocking_codes,expected_info_codes_min,expected_side_effects,setup_or_follow_up
+S1,scenario_sequence,1,S01_FreshPack_FP-2026-0418.pdf,email,registered,V01,FP-2026-0418,PO-1001,18880.00,CLEARED,,PRICE_WITHIN_TOLERANCE,,
+S2,scenario_sequence,2,S02_CleanCo_CC-7781.pdf,email,registered,V02,CC-7781,PO-1002,18408.00,ON_HOLD,BANK_DETAILS_CHANGED,PRICE_WITHIN_TOLERANCE,,
+S3,scenario_sequence,3,S03_Kumar_INV-552.pdf,email,registered,V03,INV-552,7731,10200.00,ON_HOLD,PRICE_OVER_TOLERANCE,,,"Send correction email for S3 (S3 -> AWAITING_VENDOR, token issued)"
+S4,scenario_sequence,4,S04_Kumar_INV-552_REVISED.pdf,email,registered,V03,INV-552,7731,10000.00,CLEARED,,CORRECTION_OF,S3:SUPERSEDED,
+S5,scenario_sequence,5,S05_FreshPack_FP-2026-418_reprint.pdf,email,registered,V01,FP/2026/418,PO-1001,18880.00,REJECTED,DUPLICATE_INVOICE,,,
+S6a,scenario_sequence,6,S06a_BlueFlame_BF-3301.pdf,email,registered,V04,BF-3301,PO-1003,35400.00,CLEARED,,PRICE_WITHIN_TOLERANCE,PO-1003:consumed_qty=15,
+S6b,scenario_sequence,7,S06b_BlueFlame_BF-3342.pdf,email,registered,V04,BF-3342,PO-1003,28320.00,ON_HOLD,QTY_EXCEEDS_PO|PO_AMOUNT_EXCEEDED,,,
+S7,scenario_sequence,8,S07_Sharma_SKE-119_SCANNED.pdf,email,registered,V05,SKE-119,,10266.00,ON_HOLD,SCAN_UNVERIFIED,PO_INFERRED,,
+S8,scenario_sequence,9,S08_QuickServe_QS-55.pdf,email,unregistered,UNKNOWN,QS-55,PO-2201,2950.00,ON_HOLD,VENDOR_UNKNOWN|SENDER_UNVERIFIED,,,
+S9,scenario_sequence,10,S09_FreshPack_Q-2026-77_QUOTATION.pdf,email,registered,V01,Q-2026-77,,35164.00,SKIPPED,NOT_INVOICE,,,
+S10,scenario_sequence,11,S10_CleanCo_CC-7790.pdf,email,registered,V02,CC-7790,PO-1006,11474.00,ON_HOLD,ARITHMETIC_MISMATCH,,,
+S11,scenario_sequence,12,S11_FreshPack_FP-2026-0431.pdf,email,registered,V01,FP-2026-0431,PO-1005,7186.20,CLEARED,,PRICE_WITHIN_TOLERANCE,PO-1005:consumed_qty=2000,
+S12,scenario_sequence,13,S12_Sharma_SKE-127_LUMPSUM.pdf,email,registered,V05,SKE-127,PO-1007,10620.00,ON_HOLD,BUNDLED_QUANTITY_UNVERIFIED,,,
+S13,scenario_sequence,14,S13_UrbanLinen_UL-882_INCLUSIVE.pdf,email,registered,V06,UL-882,PO-1008,6136.00,CLEARED,,PRICE_WITHIN_TOLERANCE,,
+S14,scenario_sequence,15,S14_FreshPack_FP-2026-0440_PACKS.pdf,email,registered,V01,FP-2026-0440,PO-1009,15340.00,CLEARED,,LINE_MAPPED_AI_VERIFIED|PRICE_WITHIN_TOLERANCE,,
+X1,isolated,1,X1_Kumar_INV-552_REVISED_still_high.pdf,email,registered,V03,INV-552,7731,10100.00,ON_HOLD,PRICE_OVER_TOLERANCE,CORRECTION_CANDIDATE_OF,S3:AWAITING_VENDOR->ON_HOLD|S3:not SUPERSEDED,"Fresh database: process S3, then send correction email (S3 AWAITING_VENDOR, token issued)"
+X2,isolated,2,X2_Kumar_INV-552_REVISED_no_token.pdf,email,registered,V03,INV-552,7731,10000.00,ON_HOLD,CORRECTION_UNCONFIRMED,,S3:unchanged ON_HOLD,"Fresh database: process S3 (ON_HOLD). Fresh email, no token"
+X3,isolated,3,X3_CleanCo_CC-7795_DELIVERY.pdf,email,registered,V02,CC-7795,PO-1006,11564.00,ON_HOLD,UNAPPROVED_CHARGE,,,Fresh database

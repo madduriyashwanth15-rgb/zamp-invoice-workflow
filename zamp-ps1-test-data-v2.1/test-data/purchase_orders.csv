@@ -1,0 +1,11 @@
+po_number,vendor_id,po_date,status,price_basis,subtotal_pretax
+PO-1001,V01,2026-10-05,open,pre-tax,16000.00
+PO-1002,V02,2026-10-06,open,pre-tax,15600.00
+PO-7731,V03,2026-10-14,open,pre-tax,10000.00
+PO-1003,V04,2026-10-03,open,pre-tax,50000.00
+PO-1004,V05,2026-10-07,open,pre-tax,8700.00
+PO-1005,V01,2026-10-09,open,pre-tax,6000.00
+PO-1006,V02,2026-10-08,open,pre-tax,9300.00
+PO-1007,V05,2026-10-10,open,pre-tax,9000.00
+PO-1008,V06,2026-10-09,open,pre-tax,5200.00
+PO-1009,V01,2026-10-12,open,pre-tax,13000.00

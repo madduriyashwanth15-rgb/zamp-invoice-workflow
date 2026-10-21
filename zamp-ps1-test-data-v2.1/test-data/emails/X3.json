@@ -1,0 +1,22 @@
+{
+  "test_id": "X3",
+  "shape": "internal InboundEmail (adapter output), not a provider webhook",
+  "provider_email_id": "test-email-X3",
+  "attachment_id": "test-att-X3-1",
+  "from": "accounts@cleanco.example",
+  "to": [
+    "invoices@inbound.spiceroute.example"
+  ],
+  "subject": "Invoice CC-7795",
+  "body_text": "Dear Sir/Madam,\n\nPlease find the attached invoice.\n\nRegards",
+  "is_reply_with_token": false,
+  "token_placeholder": null,
+  "token_note": null,
+  "attachments": [
+    {
+      "filename": "X3_CleanCo_CC-7795_DELIVERY.pdf",
+      "path": "invoices/X3_CleanCo_CC-7795_DELIVERY.pdf",
+      "content_type": "application/pdf"
+    }
+  ]
+}

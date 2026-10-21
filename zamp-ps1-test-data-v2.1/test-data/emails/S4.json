@@ -1,0 +1,22 @@
+{
+  "test_id": "S4",
+  "shape": "internal InboundEmail (adapter output), not a provider webhook",
+  "provider_email_id": "test-email-S4",
+  "attachment_id": "test-att-S4-1",
+  "from": "kumarveg@mail.example",
+  "to": [
+    "invoices@inbound.spiceroute.example"
+  ],
+  "subject": "Re: Correction required for invoice INV-552 [Ref {{TOKEN:S3}}]",
+  "body_text": "Dear Sir/Madam,\n\nPlease find the revised invoice attached as requested.\n\n> [Ref {{TOKEN:S3}}]\n> Your earlier message requested a corrected invoice.\n\nRegards",
+  "is_reply_with_token": true,
+  "token_placeholder": "{{TOKEN:S3}}",
+  "token_note": "Replace the placeholder with the token issued when the correction email for S3 was sent (format R-<id>).",
+  "attachments": [
+    {
+      "filename": "S04_Kumar_INV-552_REVISED.pdf",
+      "path": "invoices/S04_Kumar_INV-552_REVISED.pdf",
+      "content_type": "application/pdf"
+    }
+  ]
+}

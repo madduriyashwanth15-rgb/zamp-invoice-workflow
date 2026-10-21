@@ -1,0 +1,1219 @@
+{
+  "version": "test-data v2.1 (spec v1.2.2, test matrix v1.2.2)",
+  "note": "Expected outcomes are declared from the test matrix before any application run.",
+  "tests": [
+    {
+      "test_id": "S1",
+      "file": "invoices/S01_FreshPack_FP-2026-0418.pdf",
+      "email_payload": "emails/S1.json",
+      "group": "scenario_sequence",
+      "order": 1,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V01",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice No.",
+        "invoice_number": "FP-2026-0418",
+        "invoice_date": "2026-10-12",
+        "vendor_name": "FreshPack Packaging Pvt Ltd",
+        "vendor_gstin": "29AAFCF1234K1Z5",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "PO-1001",
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Food container 500 ml (round, PP)",
+            "hsn_sac": "3923",
+            "qty": "2000",
+            "uom": "pcs",
+            "unit_price": "6.50",
+            "amount": "13000.00",
+            "gst_rate": "0.18"
+          },
+          {
+            "line_no": 2,
+            "description": "Carry bag medium (printed)",
+            "hsn_sac": "3923",
+            "qty": "1000",
+            "uom": "pcs",
+            "unit_price": "3.00",
+            "amount": "3000.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "16000.00",
+        "cgst": "1440.00",
+        "sgst": "1440.00",
+        "tax_total": "2880.00",
+        "total": "18880.00",
+        "bank_account_last4": "4417",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "18880.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "CLEARED",
+        "blocking": [],
+        "info": [
+          "PRICE_WITHIN_TOLERANCE"
+        ],
+        "side_effects": [],
+        "due_date": "2026-11-11"
+      }
+    },
+    {
+      "test_id": "S2",
+      "file": "invoices/S02_CleanCo_CC-7781.pdf",
+      "email_payload": "emails/S2.json",
+      "group": "scenario_sequence",
+      "order": 2,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V02",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice #",
+        "invoice_number": "CC-7781",
+        "invoice_date": "2026-10-14",
+        "vendor_name": "CleanCo Hygiene Supplies",
+        "vendor_gstin": "29AAGCC5678M1Z2",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "PO-1002",
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Floor cleaner 5 L can - citrus",
+            "hsn_sac": "3402",
+            "qty": "20",
+            "uom": "can",
+            "unit_price": "450.00",
+            "amount": "9000.00",
+            "gst_rate": "0.18"
+          },
+          {
+            "line_no": 2,
+            "description": "Dishwash liquid 1 L",
+            "hsn_sac": "3402",
+            "qty": "30",
+            "uom": "bottle",
+            "unit_price": "220.00",
+            "amount": "6600.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "15600.00",
+        "cgst": "1404.00",
+        "sgst": "1404.00",
+        "tax_total": "2808.00",
+        "total": "18408.00",
+        "bank_account_last4": "0091",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "18408.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "ON_HOLD",
+        "blocking": [
+          "BANK_DETAILS_CHANGED"
+        ],
+        "info": [
+          "PRICE_WITHIN_TOLERANCE"
+        ],
+        "side_effects": []
+      }
+    },
+    {
+      "test_id": "S3",
+      "file": "invoices/S03_Kumar_INV-552.pdf",
+      "email_payload": "emails/S3.json",
+      "group": "scenario_sequence",
+      "order": 3,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": "Send correction email for S3 (S3 -> AWAITING_VENDOR, token issued)",
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V03",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "INVOICE",
+        "number_label": "Bill No.",
+        "invoice_number": "INV-552",
+        "invoice_date": "2026-10-16",
+        "vendor_name": "Kumar Vegetables",
+        "vendor_gstin": null,
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "7731",
+        "price_basis": "none",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Onions (Nashik)",
+            "hsn_sac": "0703",
+            "qty": "200",
+            "uom": "kg",
+            "unit_price": "30.00",
+            "amount": "6000.00",
+            "gst_rate": "0"
+          },
+          {
+            "line_no": 2,
+            "description": "Tomatoes",
+            "hsn_sac": "0702",
+            "qty": "100",
+            "uom": "kg",
+            "unit_price": "42.00",
+            "amount": "4200.00",
+            "gst_rate": "0"
+          }
+        ],
+        "subtotal": "10200.00",
+        "cgst": "0.00",
+        "sgst": "0.00",
+        "tax_total": "0.00",
+        "total": "10200.00",
+        "bank_account_last4": "7781",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "10200.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "ON_HOLD",
+        "blocking": [
+          "PRICE_OVER_TOLERANCE"
+        ],
+        "info": [],
+        "side_effects": []
+      }
+    },
+    {
+      "test_id": "S4",
+      "file": "invoices/S04_Kumar_INV-552_REVISED.pdf",
+      "email_payload": "emails/S4.json",
+      "group": "scenario_sequence",
+      "order": 4,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": "S3",
+      "has_text_layer_expected": true,
+      "vendor_id": "V03",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "INVOICE",
+        "number_label": "Bill No.",
+        "invoice_number": "INV-552",
+        "invoice_date": "2026-10-18",
+        "vendor_name": "Kumar Vegetables",
+        "vendor_gstin": null,
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "7731",
+        "price_basis": "none",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Onions (Nashik)",
+            "hsn_sac": "0703",
+            "qty": "200",
+            "uom": "kg",
+            "unit_price": "30.00",
+            "amount": "6000.00",
+            "gst_rate": "0"
+          },
+          {
+            "line_no": 2,
+            "description": "Tomatoes",
+            "hsn_sac": "0702",
+            "qty": "100",
+            "uom": "kg",
+            "unit_price": "40.00",
+            "amount": "4000.00",
+            "gst_rate": "0"
+          }
+        ],
+        "subtotal": "10000.00",
+        "cgst": "0.00",
+        "sgst": "0.00",
+        "tax_total": "0.00",
+        "total": "10000.00",
+        "bank_account_last4": "7781",
+        "revision_marker": true,
+        "currency": "INR"
+      },
+      "computed_total": "10000.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "CLEARED",
+        "blocking": [],
+        "info": [
+          "CORRECTION_OF"
+        ],
+        "side_effects": [
+          "S3:SUPERSEDED"
+        ]
+      }
+    },
+    {
+      "test_id": "S5",
+      "file": "invoices/S05_FreshPack_FP-2026-418_reprint.pdf",
+      "email_payload": "emails/S5.json",
+      "group": "scenario_sequence",
+      "order": 5,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V01",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice No.",
+        "invoice_number": "FP/2026/418",
+        "invoice_date": "2026-10-12",
+        "vendor_name": "FreshPack Packaging Pvt Ltd",
+        "vendor_gstin": "29AAFCF1234K1Z5",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "PO-1001",
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Food container 500 ml (round, PP)",
+            "hsn_sac": "3923",
+            "qty": "2000",
+            "uom": "pcs",
+            "unit_price": "6.50",
+            "amount": "13000.00",
+            "gst_rate": "0.18"
+          },
+          {
+            "line_no": 2,
+            "description": "Carry bag medium (printed)",
+            "hsn_sac": "3923",
+            "qty": "1000",
+            "uom": "pcs",
+            "unit_price": "3.00",
+            "amount": "3000.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "16000.00",
+        "cgst": "1440.00",
+        "sgst": "1440.00",
+        "tax_total": "2880.00",
+        "total": "18880.00",
+        "bank_account_last4": "4417",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "18880.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "REJECTED",
+        "blocking": [
+          "DUPLICATE_INVOICE"
+        ],
+        "info": [],
+        "side_effects": []
+      }
+    },
+    {
+      "test_id": "S6a",
+      "file": "invoices/S06a_BlueFlame_BF-3301.pdf",
+      "email_payload": "emails/S6a.json",
+      "group": "scenario_sequence",
+      "order": 6,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V04",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice No.",
+        "invoice_number": "BF-3301",
+        "invoice_date": "2026-10-10",
+        "vendor_name": "BlueFlame Gas Supplies",
+        "vendor_gstin": "29AABCB4321P1Z8",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "PO-1003",
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "LPG cylinder 19 kg commercial (refill)",
+            "hsn_sac": "2711",
+            "qty": "15",
+            "uom": "cyl",
+            "unit_price": "2000.00",
+            "amount": "30000.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "30000.00",
+        "cgst": "2700.00",
+        "sgst": "2700.00",
+        "tax_total": "5400.00",
+        "total": "35400.00",
+        "bank_account_last4": "5530",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "35400.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "CLEARED",
+        "blocking": [],
+        "info": [
+          "PRICE_WITHIN_TOLERANCE"
+        ],
+        "side_effects": [
+          "PO-1003:consumed_qty=15"
+        ]
+      }
+    },
+    {
+      "test_id": "S6b",
+      "file": "invoices/S06b_BlueFlame_BF-3342.pdf",
+      "email_payload": "emails/S6b.json",
+      "group": "scenario_sequence",
+      "order": 7,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V04",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice No.",
+        "invoice_number": "BF-3342",
+        "invoice_date": "2026-10-17",
+        "vendor_name": "BlueFlame Gas Supplies",
+        "vendor_gstin": "29AABCB4321P1Z8",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "PO-1003",
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "LPG cylinder 19 kg commercial (refill)",
+            "hsn_sac": "2711",
+            "qty": "12",
+            "uom": "cyl",
+            "unit_price": "2000.00",
+            "amount": "24000.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "24000.00",
+        "cgst": "2160.00",
+        "sgst": "2160.00",
+        "tax_total": "4320.00",
+        "total": "28320.00",
+        "bank_account_last4": "5530",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "28320.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "ON_HOLD",
+        "blocking": [
+          "QTY_EXCEEDS_PO",
+          "PO_AMOUNT_EXCEEDED"
+        ],
+        "info": [],
+        "side_effects": []
+      }
+    },
+    {
+      "test_id": "S7",
+      "file": "invoices/S07_Sharma_SKE-119_SCANNED.pdf",
+      "email_payload": "emails/S7.json",
+      "group": "scenario_sequence",
+      "order": 8,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": false,
+      "vendor_id": "V05",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice No.",
+        "invoice_number": "SKE-119",
+        "invoice_date": "2026-10-15",
+        "vendor_name": "Sharma Kitchen Equipment",
+        "vendor_gstin": "29ABHPS9876Q1Z3",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": null,
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Burner servicing - 4 burner range",
+            "hsn_sac": "9987",
+            "qty": "4",
+            "uom": "visit",
+            "unit_price": "1500.00",
+            "amount": "6000.00",
+            "gst_rate": "0.18"
+          },
+          {
+            "line_no": 2,
+            "description": "Gas hose replacement (1.5 m)",
+            "hsn_sac": "4009",
+            "qty": "6",
+            "uom": "pcs",
+            "unit_price": "450.00",
+            "amount": "2700.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "8700.00",
+        "cgst": "783.00",
+        "sgst": "783.00",
+        "tax_total": "1566.00",
+        "total": "10266.00",
+        "bank_account_last4": "1188",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "10266.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": [
+        "doc_type",
+        "vendor_name",
+        "vendor_gstin",
+        "invoice_number",
+        "invoice_date",
+        "po_reference",
+        "price_basis",
+        "lines[].description",
+        "lines[].qty",
+        "lines[].uom",
+        "lines[].unit_price",
+        "lines[].amount",
+        "lines[].gst_rate",
+        "subtotal",
+        "cgst",
+        "sgst",
+        "tax_total",
+        "total",
+        "bank_account_last4"
+      ],
+      "expected": {
+        "outcome": "ON_HOLD",
+        "blocking": [
+          "SCAN_UNVERIFIED"
+        ],
+        "info": [
+          "PO_INFERRED"
+        ],
+        "side_effects": [],
+        "expected_po": "PO-1004",
+        "po_candidates_open": [
+          "PO-1004",
+          "PO-1007"
+        ],
+        "extraction_accuracy_required": true,
+        "note": "Pass needs exactly SCAN_UNVERIFIED, PO_INFERRED to PO-1004, and every critical field equal to expected_extraction (see critical_fields). Any misread is a failure, even if the outcome is still ON_HOLD."
+      }
+    },
+    {
+      "test_id": "S8",
+      "file": "invoices/S08_QuickServe_QS-55.pdf",
+      "email_payload": "emails/S8.json",
+      "group": "scenario_sequence",
+      "order": 9,
+      "path": "email",
+      "sender": "unregistered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": null,
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice #",
+        "invoice_number": "QS-55",
+        "invoice_date": "2026-10-16",
+        "vendor_name": "QuickServe Traders",
+        "vendor_gstin": "29AAKCQ1357S1Z9",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "PO-2201",
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Kitchen towel rolls",
+            "hsn_sac": "4818",
+            "qty": "100",
+            "uom": "roll",
+            "unit_price": "25.00",
+            "amount": "2500.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "2500.00",
+        "cgst": "225.00",
+        "sgst": "225.00",
+        "tax_total": "450.00",
+        "total": "2950.00",
+        "bank_account_last4": "4455",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "2950.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "ON_HOLD",
+        "blocking": [
+          "VENDOR_UNKNOWN",
+          "SENDER_UNVERIFIED"
+        ],
+        "info": [],
+        "side_effects": []
+      }
+    },
+    {
+      "test_id": "S9",
+      "file": "invoices/S09_FreshPack_Q-2026-77_QUOTATION.pdf",
+      "email_payload": "emails/S9.json",
+      "group": "scenario_sequence",
+      "order": 10,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V01",
+      "expected_extraction": {
+        "doc_type": "quotation",
+        "document_title": "QUOTATION",
+        "number_label": "Quote No.",
+        "invoice_number": "Q-2026-77",
+        "invoice_date": "2026-10-13",
+        "vendor_name": "FreshPack Packaging Pvt Ltd",
+        "vendor_gstin": "29AAFCF1234K1Z5",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": null,
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Food container 750 ml (round, PP)",
+            "hsn_sac": "3923",
+            "qty": "3000",
+            "uom": "pcs",
+            "unit_price": "7.20",
+            "amount": "21600.00",
+            "gst_rate": "0.18"
+          },
+          {
+            "line_no": 2,
+            "description": "Carry bag large (printed)",
+            "hsn_sac": "3923",
+            "qty": "2000",
+            "uom": "pcs",
+            "unit_price": "4.10",
+            "amount": "8200.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "29800.00",
+        "cgst": "2682.00",
+        "sgst": "2682.00",
+        "tax_total": "5364.00",
+        "total": "35164.00",
+        "bank_account_last4": "4417",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "35164.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "SKIPPED",
+        "blocking": [
+          "NOT_INVOICE"
+        ],
+        "info": [],
+        "side_effects": []
+      }
+    },
+    {
+      "test_id": "S10",
+      "file": "invoices/S10_CleanCo_CC-7790.pdf",
+      "email_payload": "emails/S10.json",
+      "group": "scenario_sequence",
+      "order": 11,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V02",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice #",
+        "invoice_number": "CC-7790",
+        "invoice_date": "2026-10-15",
+        "vendor_name": "CleanCo Hygiene Supplies",
+        "vendor_gstin": "29AAGCC5678M1Z2",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "PO-1006",
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Glass cleaner 500 ml spray",
+            "hsn_sac": "3402",
+            "qty": "40",
+            "uom": "bottle",
+            "unit_price": "120.00",
+            "amount": "4800.00",
+            "gst_rate": "0.18"
+          },
+          {
+            "line_no": 2,
+            "description": "Garbage bag roll - large",
+            "hsn_sac": "3923",
+            "qty": "50",
+            "uom": "roll",
+            "unit_price": "90.00",
+            "amount": "4500.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "9300.00",
+        "cgst": "837.00",
+        "sgst": "837.00",
+        "tax_total": "1674.00",
+        "total": "11474.00",
+        "bank_account_last4": "2290",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "10974.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "ON_HOLD",
+        "blocking": [
+          "ARITHMETIC_MISMATCH"
+        ],
+        "info": [],
+        "side_effects": []
+      }
+    },
+    {
+      "test_id": "S11",
+      "file": "invoices/S11_FreshPack_FP-2026-0431.pdf",
+      "email_payload": "emails/S11.json",
+      "group": "scenario_sequence",
+      "order": 12,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V01",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice No.",
+        "invoice_number": "FP-2026-0431",
+        "invoice_date": "2026-10-19",
+        "vendor_name": "FreshPack Packaging Pvt Ltd",
+        "vendor_gstin": "29AAFCF1234K1Z5",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "PO-1005",
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Carry bag medium (printed)",
+            "hsn_sac": "3923",
+            "qty": "2000",
+            "uom": "pcs",
+            "unit_price": "3.045",
+            "amount": "6090.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "6090.00",
+        "cgst": "548.10",
+        "sgst": "548.10",
+        "tax_total": "1096.20",
+        "total": "7186.20",
+        "bank_account_last4": "4417",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "7186.20",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "CLEARED",
+        "blocking": [],
+        "info": [
+          "PRICE_WITHIN_TOLERANCE"
+        ],
+        "side_effects": [
+          "PO-1005:consumed_qty=2000"
+        ]
+      }
+    },
+    {
+      "test_id": "S12",
+      "file": "invoices/S12_Sharma_SKE-127_LUMPSUM.pdf",
+      "email_payload": "emails/S12.json",
+      "group": "scenario_sequence",
+      "order": 13,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V05",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice No.",
+        "invoice_number": "SKE-127",
+        "invoice_date": "2026-10-19",
+        "vendor_name": "Sharma Kitchen Equipment",
+        "vendor_gstin": "29ABHPS9876Q1Z3",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "PO-1007",
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Exhaust hood and duct cleaning as per PO-1007 (lump sum)",
+            "hsn_sac": "9987",
+            "qty": "1",
+            "uom": "LS",
+            "unit_price": "9000.00",
+            "amount": "9000.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "9000.00",
+        "cgst": "810.00",
+        "sgst": "810.00",
+        "tax_total": "1620.00",
+        "total": "10620.00",
+        "bank_account_last4": "1188",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "10620.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "ON_HOLD",
+        "blocking": [
+          "BUNDLED_QUANTITY_UNVERIFIED"
+        ],
+        "info": [],
+        "side_effects": [],
+        "note": "Detected as lump-sum by explicit markers ('lump sum' in the description; unit LS) before M1. The PO number in the description is not what makes it lump-sum."
+      }
+    },
+    {
+      "test_id": "S13",
+      "file": "invoices/S13_UrbanLinen_UL-882_INCLUSIVE.pdf",
+      "email_payload": "emails/S13.json",
+      "group": "scenario_sequence",
+      "order": 14,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V06",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice No.",
+        "invoice_number": "UL-882",
+        "invoice_date": "2026-10-17",
+        "vendor_name": "UrbanLinen Services",
+        "vendor_gstin": "29AAECU2468R1Z6",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "PO-1008",
+        "price_basis": "inclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Napkin laundry (cotton)",
+            "hsn_sac": "9997",
+            "qty": "500",
+            "uom": "pcs",
+            "unit_price": "9.44",
+            "amount": "4720.00",
+            "gst_rate": "0.18"
+          },
+          {
+            "line_no": 2,
+            "description": "Apron laundry",
+            "hsn_sac": "9997",
+            "qty": "100",
+            "uom": "pcs",
+            "unit_price": "14.16",
+            "amount": "1416.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "5200.00",
+        "cgst": "468.00",
+        "sgst": "468.00",
+        "tax_total": "936.00",
+        "total": "6136.00",
+        "bank_account_last4": "3365",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "6136.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "CLEARED",
+        "blocking": [],
+        "info": [
+          "PRICE_WITHIN_TOLERANCE"
+        ],
+        "side_effects": []
+      }
+    },
+    {
+      "test_id": "S14",
+      "file": "invoices/S14_FreshPack_FP-2026-0440_PACKS.pdf",
+      "email_payload": "emails/S14.json",
+      "group": "scenario_sequence",
+      "order": 15,
+      "path": "email",
+      "sender": "registered",
+      "setup": null,
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V01",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice No.",
+        "invoice_number": "FP-2026-0440",
+        "invoice_date": "2026-10-20",
+        "vendor_name": "FreshPack Packaging Pvt Ltd",
+        "vendor_gstin": "29AAFCF1234K1Z5",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "PO-1009",
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Takeaway box 500cc - Pack of 50",
+            "hsn_sac": "3923",
+            "qty": "40",
+            "uom": "pack",
+            "unit_price": "325.00",
+            "amount": "13000.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "13000.00",
+        "cgst": "1170.00",
+        "sgst": "1170.00",
+        "tax_total": "2340.00",
+        "total": "15340.00",
+        "bank_account_last4": "4417",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "15340.00",
+      "ai_mapping_ground_truth": [
+        {
+          "invoice_line": 1,
+          "proposed_po_line": 1,
+          "pack_size_read": 50,
+          "justification": "Takeaway box 500cc is the 500 ml food container; sold in packs of 50."
+        }
+      ],
+      "critical_fields": null,
+      "expected": {
+        "outcome": "CLEARED",
+        "blocking": [],
+        "info": [
+          "LINE_MAPPED_AI_VERIFIED",
+          "PRICE_WITHIN_TOLERANCE"
+        ],
+        "side_effects": [],
+        "note": "Assumes AI mapping proposal (M2) is built; otherwise ON_HOLD LINE_UNMAPPED, changed before running."
+      }
+    },
+    {
+      "test_id": "X1",
+      "file": "invoices/X1_Kumar_INV-552_REVISED_still_high.pdf",
+      "email_payload": "emails/X1.json",
+      "group": "isolated",
+      "order": 1,
+      "path": "email",
+      "sender": "registered",
+      "setup": "Fresh database: process S3, then send correction email (S3 AWAITING_VENDOR, token issued)",
+      "after_run": null,
+      "reply_token_of": "S3",
+      "has_text_layer_expected": true,
+      "vendor_id": "V03",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "INVOICE",
+        "number_label": "Bill No.",
+        "invoice_number": "INV-552",
+        "invoice_date": "2026-10-18",
+        "vendor_name": "Kumar Vegetables",
+        "vendor_gstin": null,
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "7731",
+        "price_basis": "none",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Onions (Nashik)",
+            "hsn_sac": "0703",
+            "qty": "200",
+            "uom": "kg",
+            "unit_price": "30.00",
+            "amount": "6000.00",
+            "gst_rate": "0"
+          },
+          {
+            "line_no": 2,
+            "description": "Tomatoes",
+            "hsn_sac": "0702",
+            "qty": "100",
+            "uom": "kg",
+            "unit_price": "41.00",
+            "amount": "4100.00",
+            "gst_rate": "0"
+          }
+        ],
+        "subtotal": "10100.00",
+        "cgst": "0.00",
+        "sgst": "0.00",
+        "tax_total": "0.00",
+        "total": "10100.00",
+        "bank_account_last4": "7781",
+        "revision_marker": true,
+        "currency": "INR"
+      },
+      "computed_total": "10100.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "ON_HOLD",
+        "blocking": [
+          "PRICE_OVER_TOLERANCE"
+        ],
+        "info": [
+          "CORRECTION_CANDIDATE_OF"
+        ],
+        "side_effects": [
+          "S3:AWAITING_VENDOR->ON_HOLD",
+          "S3:not SUPERSEDED"
+        ]
+      }
+    },
+    {
+      "test_id": "X2",
+      "file": "invoices/X2_Kumar_INV-552_REVISED_no_token.pdf",
+      "email_payload": "emails/X2.json",
+      "group": "isolated",
+      "order": 2,
+      "path": "email",
+      "sender": "registered",
+      "setup": "Fresh database: process S3 (ON_HOLD). Fresh email, no token",
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V03",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "INVOICE",
+        "number_label": "Bill No.",
+        "invoice_number": "INV-552",
+        "invoice_date": "2026-10-18",
+        "vendor_name": "Kumar Vegetables",
+        "vendor_gstin": null,
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "7731",
+        "price_basis": "none",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Onions (Nashik)",
+            "hsn_sac": "0703",
+            "qty": "200",
+            "uom": "kg",
+            "unit_price": "30.00",
+            "amount": "6000.00",
+            "gst_rate": "0"
+          },
+          {
+            "line_no": 2,
+            "description": "Tomatoes",
+            "hsn_sac": "0702",
+            "qty": "100",
+            "uom": "kg",
+            "unit_price": "40.00",
+            "amount": "4000.00",
+            "gst_rate": "0"
+          }
+        ],
+        "subtotal": "10000.00",
+        "cgst": "0.00",
+        "sgst": "0.00",
+        "tax_total": "0.00",
+        "total": "10000.00",
+        "bank_account_last4": "7781",
+        "revision_marker": true,
+        "currency": "INR"
+      },
+      "computed_total": "10000.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "ON_HOLD",
+        "blocking": [
+          "CORRECTION_UNCONFIRMED"
+        ],
+        "info": [],
+        "side_effects": [
+          "S3:unchanged ON_HOLD"
+        ]
+      }
+    },
+    {
+      "test_id": "X3",
+      "file": "invoices/X3_CleanCo_CC-7795_DELIVERY.pdf",
+      "email_payload": "emails/X3.json",
+      "group": "isolated",
+      "order": 3,
+      "path": "email",
+      "sender": "registered",
+      "setup": "Fresh database",
+      "after_run": null,
+      "reply_token_of": null,
+      "has_text_layer_expected": true,
+      "vendor_id": "V02",
+      "expected_extraction": {
+        "doc_type": "invoice",
+        "document_title": "TAX INVOICE",
+        "number_label": "Invoice #",
+        "invoice_number": "CC-7795",
+        "invoice_date": "2026-10-20",
+        "vendor_name": "CleanCo Hygiene Supplies",
+        "vendor_gstin": "29AAGCC5678M1Z2",
+        "buyer_name": "SpiceRoute Kitchens Pvt Ltd",
+        "po_reference": "PO-1006",
+        "price_basis": "exclusive",
+        "lines": [
+          {
+            "line_no": 1,
+            "description": "Glass cleaner 500 ml spray",
+            "hsn_sac": "3402",
+            "qty": "40",
+            "uom": "bottle",
+            "unit_price": "120.00",
+            "amount": "4800.00",
+            "gst_rate": "0.18"
+          },
+          {
+            "line_no": 2,
+            "description": "Garbage bag roll - large",
+            "hsn_sac": "3923",
+            "qty": "50",
+            "uom": "roll",
+            "unit_price": "90.00",
+            "amount": "4500.00",
+            "gst_rate": "0.18"
+          },
+          {
+            "line_no": 3,
+            "description": "Delivery charges",
+            "hsn_sac": "9965",
+            "qty": "1",
+            "uom": "job",
+            "unit_price": "500.00",
+            "amount": "500.00",
+            "gst_rate": "0.18"
+          }
+        ],
+        "subtotal": "9800.00",
+        "cgst": "882.00",
+        "sgst": "882.00",
+        "tax_total": "1764.00",
+        "total": "11564.00",
+        "bank_account_last4": "2290",
+        "revision_marker": false,
+        "currency": "INR"
+      },
+      "computed_total": "11564.00",
+      "ai_mapping_ground_truth": null,
+      "critical_fields": null,
+      "expected": {
+        "outcome": "ON_HOLD",
+        "blocking": [
+          "UNAPPROVED_CHARGE"
+        ],
+        "info": [],
+        "side_effects": []
+      }
+    }
+  ]
+}

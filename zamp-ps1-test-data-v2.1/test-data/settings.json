@@ -1,0 +1,44 @@
+{
+  "price_tolerance_pct": 2.0,
+  "quantity_tolerance_pct": 0.0,
+  "rounding_tolerance_inr": 1.0,
+  "approval_limit_inr": 200000.0,
+  "ap_forwarder_allowlist": [
+    "ap-forwarder@spiceroute.example"
+  ],
+  "charge_keywords": [
+    "delivery",
+    "freight",
+    "transport",
+    "transportation",
+    "handling",
+    "packing",
+    "loading",
+    "unloading",
+    "cartage",
+    "courier",
+    "shipping",
+    "surcharge",
+    "service charge",
+    "convenience fee"
+  ],
+  "lump_sum_markers": {
+    "phrases": [
+      "lump sum",
+      "lumpsum"
+    ],
+    "units": [
+      "LS"
+    ]
+  },
+  "currency": "INR",
+  "buyer": {
+    "name": "SpiceRoute Kitchens Pvt Ltd",
+    "address": [
+      "No. 45, 2nd Cross, Example Layout",
+      "Koramangala, Bengaluru 560034, Karnataka"
+    ],
+    "gstin": "29AAJCS2468K1Z1"
+  },
+  "inbound_address_placeholder": "invoices@inbound.spiceroute.example"
+}

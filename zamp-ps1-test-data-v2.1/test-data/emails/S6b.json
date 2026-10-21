@@ -1,0 +1,22 @@
+{
+  "test_id": "S6b",
+  "shape": "internal InboundEmail (adapter output), not a provider webhook",
+  "provider_email_id": "test-email-S6b",
+  "attachment_id": "test-att-S6b-1",
+  "from": "billing@blueflame.example",
+  "to": [
+    "invoices@inbound.spiceroute.example"
+  ],
+  "subject": "Invoice BF-3342",
+  "body_text": "Dear Sir/Madam,\n\nPlease find the attached invoice.\n\nRegards",
+  "is_reply_with_token": false,
+  "token_placeholder": null,
+  "token_note": null,
+  "attachments": [
+    {
+      "filename": "S06b_BlueFlame_BF-3342.pdf",
+      "path": "invoices/S06b_BlueFlame_BF-3342.pdf",
+      "content_type": "application/pdf"
+    }
+  ]
+}
