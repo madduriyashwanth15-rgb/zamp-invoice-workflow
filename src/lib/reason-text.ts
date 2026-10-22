@@ -1,0 +1,80 @@
+import type { ReasonCode } from "@/domain/codes";
+import type { RunState } from "@/domain/engine/types";
+
+// Plain-English wording for codes and states (presentation only; the codes themselves are spec sections 9-10).
+
+export const STATE_TEXT: Record<RunState, { label: string; tone: Tone }> = {
+  RECEIVED: { label: "Received", tone: "neutral" },
+  PROCESSING: { label: "Reading", tone: "neutral" },
+  SKIPPED: { label: "Skipped", tone: "muted" },
+  CLEARED: { label: "Cleared by checks", tone: "ok" },
+  ON_HOLD: { label: "On hold", tone: "hold" },
+  AWAITING_VENDOR: { label: "Waiting for vendor", tone: "wait" },
+  APPROVED: { label: "Approved for payment list", tone: "approved" },
+  REJECTED: { label: "Rejected", tone: "bad" },
+  SUPERSEDED: { label: "Replaced by a correction", tone: "muted" },
+  FAILED: { label: "Could not be read", tone: "bad" },
+};
+
+export type Tone = "neutral" | "muted" | "ok" | "hold" | "wait" | "approved" | "bad";
+
+export const CODE_TEXT: Record<ReasonCode, { title: string; next?: string }> = {
+  NO_ATTACHMENT: { title: "The email had no attachment" },
+  UNSUPPORTED_FILE: { title: "File type or size not supported", next: "Ask the vendor for a PDF, PNG or JPEG under 4 MB." },
+  NOT_INVOICE: { title: "Not an invoice", next: "If it really is an invoice, process it as one with a note." },
+  DUPLICATE_INVOICE: { title: "Duplicate of an invoice already received" },
+  VENDOR_UNKNOWN: { title: "Vendor not in the vendor master", next: "Add the vendor through onboarding before paying, or reject." },
+  SENDER_UNVERIFIED: { title: "Sent from an address not registered for this vendor", next: "Confirm with the vendor using the phone number in the vendor master." },
+  BANK_DETAILS_CHANGED: { title: "Bank account differs from the vendor master", next: "Call the vendor on the master phone number before any change. Never use a number printed on the invoice." },
+  VENDOR_GSTIN_MISMATCH: { title: "Vendor GSTIN does not match the master" },
+  POSSIBLE_DOUBLE_BILLING: { title: "Same invoice number already payable with different content", next: "Compare both invoices. Replace the approved one only if this is the vendor's correction." },
+  RELATED_INVOICE_DISPUTE: { title: "A later invoice with the same number disputes this one", next: "Resolve the newer invoice first." },
+  CORRECTION_UNCONFIRMED: { title: "Looks like a correction, but the link is not confirmed", next: "Confirm the link if this replaces the held invoice." },
+  POSSIBLE_DUPLICATE: { title: "Similar invoice already received" },
+  CLASSIFICATION_CONFLICT: { title: "Document type and title disagree" },
+  CREDIT_NOTE_UNSUPPORTED: { title: "Credit notes are not processed here", next: "Handle it in the credit-note process." },
+  EXTRACTION_FAILED: { title: "The document could not be read reliably", next: "Retry later or enter it manually outside this workflow." },
+  MISSING_REQUIRED_FIELD: { title: "A required field is missing", next: "Ask the vendor for a complete invoice." },
+  EVIDENCE_NOT_FOUND: { title: "A value read from the document is not in its text", next: "Check the value against the document image." },
+  ARITHMETIC_MISMATCH: { title: "Lines, tax and total do not add up", next: "Ask the vendor for a corrected invoice." },
+  SCAN_UNVERIFIED: { title: "Scanned image: values need a human check", next: "Compare the values with the image, then approve or ask for a digital copy." },
+  TAX_BASIS_UNCLEAR: { title: "Unclear whether prices include GST" },
+  TAX_RATE_MISMATCH: { title: "GST rate differs from the PO" },
+  PO_NOT_FOUND: { title: "Purchase order not found" },
+  PO_AMBIGUOUS: { title: "More than one open PO could match" },
+  PO_VENDOR_MISMATCH: { title: "PO belongs to another vendor" },
+  PO_CLOSED: { title: "PO is closed" },
+  UNAPPROVED_CHARGE: { title: "Charge not approved on the PO", next: "Ask the vendor to remove it, or approve the exception with a note." },
+  LINE_UNMAPPED: { title: "A line does not match any PO line" },
+  UOM_UNSUPPORTED: { title: "Unit cannot be converted to the PO unit" },
+  AI_PROPOSAL_REJECTED: { title: "AI-proposed line match failed the code check" },
+  QTY_EXCEEDS_PO: { title: "More quantity billed than ordered" },
+  PO_AMOUNT_EXCEEDED: { title: "Billed amount exceeds the PO" },
+  PRICE_OVER_TOLERANCE: { title: "Price above the PO beyond tolerance", next: "Send a correction request to the vendor." },
+  BUNDLED_QUANTITY_UNVERIFIED: { title: "Lump-sum line: delivered quantity cannot be checked", next: "Confirm the work was completed, then approve with a note." },
+  DATE_INVALID: { title: "Invoice date is in the future" },
+  APPROVAL_LIMIT_EXCEEDED: { title: "Above the approval limit" },
+  MANUAL_HOLD: { title: "Held by a reviewer" },
+  ATTACHMENT_FETCH_FAILED: { title: "The attachment could not be downloaded", next: "Ask the vendor to send it again." },
+  PROCESSING_ERROR: { title: "Reading failed after retries", next: "Retry. The run keeps its id and history." },
+  PO_INFERRED: { title: "PO inferred: no PO printed" },
+  PRICE_WITHIN_TOLERANCE: { title: "Price within tolerance" },
+  PRICE_BELOW_PO: { title: "Price below the PO" },
+  BANK_NOT_SHOWN: { title: "No bank details printed" },
+  LINE_MAPPED_AI_VERIFIED: { title: "Line matched by AI, verified by code" },
+  CORRECTION_OF: { title: "Correction of an earlier invoice" },
+  CORRECTION_CANDIDATE_OF: { title: "Possible correction of an earlier invoice" },
+};
+
+export const ACTION_TEXT = {
+  approve: { label: "Approve for payment list", done: "Approved for payment list" },
+  manual_hold: { label: "Put on hold", done: "Put on hold" },
+  override_approve: { label: "Approve with exception", done: "Approved with exception" },
+  reject: { label: "Reject", done: "Rejected" },
+  request_correction: { label: "Request correction", done: "Correction requested" },
+  stop_waiting: { label: "Stop waiting", done: "Back on hold" },
+  confirm_link: { label: "Confirm it replaces the held invoice", done: "Link confirmed and approved" },
+  replace_approved: { label: "Replace the approved invoice", done: "Replaced and approved" },
+  retry: { label: "Retry reading", done: "Reading again" },
+  process_as_invoice: { label: "Process as an invoice", done: "Processing as an invoice" },
+} as const;

@@ -69,4 +69,6 @@ export interface InboundEmail {
   subject: string;
   body_text: string;
   attachments: { filename: string; path: string; content_type: string }[];
+  /** DMARC result when the provider reports it (false = failed). Recorded test emails carry none. */
+  sender_authenticated?: boolean | null;
 }

@@ -6,9 +6,14 @@ function hasPhrase(text: string, phrase: string): boolean {
   return ` ${tokens(text).join(" ")} `.includes(` ${tokens(phrase).join(" ")} `);
 }
 
+/** M7: the charge keywords (from settings) the description contains, in settings order. */
+export function matchedChargeKeywords(description: string, settings: Settings): string[] {
+  return settings.charge_keywords.filter((k) => hasPhrase(description, k));
+}
+
 /** M7: the description contains a charge keyword. */
 export function isChargeLine(description: string, settings: Settings): boolean {
-  return settings.charge_keywords.some((k) => hasPhrase(description, k));
+  return matchedChargeKeywords(description, settings).length > 0;
 }
 
 /** M5: explicit marker only: a marker phrase in description or unit, or a lump-sum unit code. */

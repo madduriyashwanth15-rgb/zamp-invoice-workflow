@@ -1,26 +1,121 @@
 @import "tailwindcss";
 
+/*
+  Design tokens. An accounts-payable desk: ledger-grey paper, blue-black ballpoint ink, carbon-copy blue for
+  actions, and the colours of multi-part invoice books for status (canary = needs attention, pink = refused,
+  blue copy = waiting on someone else, ledger green = passed). Values the AI read are "pencilled in" (graphite,
+  dashed) until code has checked them in ink.
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #f2f4f1;
+  --surface: #ffffff;
+  --ink: #1d2433;
+  --ink-2: #4b5567;
+  --ink-3: #6c7586;
+  --rule: #d8ddd5;
+  --rule-strong: #b9c0b5;
+  --carbon: #2c44a6;
+  --carbon-deep: #1f3283;
+  --carbon-wash: #e8ecfa;
+  --graphite: #868c96;
+
+  --ok-bg: #e1f0e3;
+  --ok-fg: #1c5c33;
+  --ok-edge: #9ccaa6;
+  --hold-bg: #fff1b8;
+  --hold-fg: #654700;
+  --hold-edge: #dfbd36;
+  --wait-bg: #e2e9fa;
+  --wait-fg: #29448f;
+  --wait-edge: #a9bceb;
+  --approved-bg: #184d2c;
+  --approved-fg: #f1f8f2;
+  --bad-bg: #fbe2e6;
+  --bad-fg: #8f2134;
+  --bad-edge: #e6a0ad;
+  --muted-bg: #eceef0;
+  --muted-fg: #535b6a;
+  --muted-edge: #c9ced6;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-carbon: var(--carbon);
+  --color-carbon-deep: var(--carbon-deep);
+  --color-carbon-wash: var(--carbon-wash);
+  --color-graphite: var(--graphite);
+  --color-ok-bg: var(--ok-bg);
+  --color-ok-fg: var(--ok-fg);
+  --color-ok-edge: var(--ok-edge);
+  --color-hold-bg: var(--hold-bg);
+  --color-hold-fg: var(--hold-fg);
+  --color-hold-edge: var(--hold-edge);
+  --color-wait-bg: var(--wait-bg);
+  --color-wait-fg: var(--wait-fg);
+  --color-wait-edge: var(--wait-edge);
+  --color-approved-bg: var(--approved-bg);
+  --color-approved-fg: var(--approved-fg);
+  --color-bad-bg: var(--bad-bg);
+  --color-bad-fg: var(--bad-fg);
+  --color-bad-edge: var(--bad-edge);
+  --color-muted-bg: var(--muted-bg);
+  --color-muted-fg: var(--muted-fg);
+  --color-muted-edge: var(--muted-edge);
+  --font-sans: "Atkinson Hyperlegible Next Variable", ui-sans-serif, system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--paper);
+  color: var(--ink);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  font-feature-settings: "tnum" 0;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--carbon);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes reading {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+.reading-bar {
+  position: relative;
+  overflow: hidden;
+}
+.reading-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--carbon), transparent);
+  animation: reading 1.4s ease-in-out infinite;
 }

@@ -1,0 +1,597 @@
+"use client";
+
+import Link from "next/link";
+import { useParams, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import type { ReviewAction } from "@/domain/runs/queries";
+import type { FindingView, RunDetail, StageView } from "@/server/views";
+import { formatDate, formatInr, formatTime } from "@/lib/format";
+import { ACTION_TEXT, STATE_TEXT } from "@/lib/reason-text";
+import { api, errorText, isRefusal } from "./api";
+import { StateChip, toneClasses } from "./chips";
+import { useIdentity } from "./identity";
+import { usePoll } from "./use-poll";
+
+// One invoice: what was decided and why, the routing slip of every check, the document beside what was read
+// from it, the actions a reviewer may take, and the full history.
+
+const inFlight = (r: RunDetail | null) => r?.state === "RECEIVED" || r?.state === "PROCESSING";
+
+export function RunView() {
+  const { id } = useParams<{ id: string }>();
+  const search = useSearchParams();
+  const { data: run, error, loading, refresh } = usePoll(() => api.run(id), (d) => (inFlight(d) ? 1200 : 20000));
+
+  if (loading && !run) return <p className="py-16 text-center text-ink-2">Loading the invoice</p>;
+  if (!run) {
+    return (
+      <div className="py-16 text-center">
+        <p className="text-bad-fg">{isRefusal(error) && error.code === "NOT_FOUND" ? "There is no invoice with this link." : errorText(error)}</p>
+        <Link href="/" className="mt-3 inline-block text-carbon-deep underline">
+          Back to all invoices
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <article className="space-y-6">
+      <Link href="/" className="text-sm text-carbon-deep hover:underline">
+        Back to all invoices
+      </Link>
+      {search.get("repeat") && (
+        <p role="status" className="rounded-md border border-wait-edge bg-wait-bg px-3 py-2 text-sm text-wait-fg">
+          This file was uploaded less than a minute ago, so you are looking at the run it already created.
+        </p>
+      )}
+      <Header run={run} />
+      <Decision run={run} onChanged={refresh} />
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] [&>*]:min-w-0">
+        <RoutingSlip run={run} />
+        <DocumentPanel run={run} />
+      </div>
+      {run.related.length > 0 && <Related run={run} />}
+      <History run={run} />
+    </article>
+  );
+}
+
+function Header({ run }: { run: RunDetail }) {
+  const facts: [string, React.ReactNode][] = [
+    ["Invoice number", run.invoice_number ? <span className="num">{run.invoice_number}</span> : "not read"],
+    ["Invoice date", formatDate(run.invoice_date) ?? "not read"],
+    ["Purchase order", run.po_number ?? "none matched"],
+    ["Due (per terms)", formatDate(run.due_date) ?? "set when cleared"],
+    [run.source === "email" ? "Emailed by" : "Uploaded by", run.source === "email" ? run.sender_email : `${run.uploader} (demo identity)`],
+    ["Run", <span key="ref" className="num">{run.ref}</span>],
+  ];
+  return (
+    <header className="space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">{run.vendor ?? run.filename ?? "Unread document"}</h1>
+          {!run.vendor_known && run.vendor && <p className="text-sm text-hold-fg">Name as printed; not found in the vendor master</p>}
+        </div>
+        <div className="text-right">
+          <p className="num text-3xl font-bold">{run.total ?? <span className="text-xl font-normal text-ink-3">total not read</span>}</p>
+          <div className="mt-1">
+            <StateChip tone={run.tone} label={run.state_label} exported={run.exported} />
+          </div>
+        </div>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-6 gap-y-2 border-y border-rule py-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
+        {facts.map(([k, v]) => (
+          <div key={k}>
+            <dt className="text-ink-3">{k}</dt>
+            <dd className="break-words font-semibold text-ink">{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </header>
+  );
+}
+
+/** U1: every displayed reviewer name carries its demo-identity label. */
+const demoName = (n: string | null | undefined) => (n ? `${n} (demo identity)` : "a reviewer");
+
+function stateSentence(run: RunDetail): string {
+  const lastApproval = run.approvals.at(-1);
+  switch (run.state) {
+    case "RECEIVED":
+    case "PROCESSING":
+      return "Reading the document. The checks run as soon as it is read.";
+    case "CLEARED":
+      return run.export_blocked
+        ? "Every check passed, but a related invoice disputes it, so it cannot be exported."
+        : "Every check passed. It needs a reviewer's approval before it goes on the payment list.";
+    case "APPROVED":
+      return run.exported
+        ? `Approved for payment list by ${demoName(lastApproval?.approver_display_name)}, ${formatTime(lastApproval?.approved_at)}. Exported to payment list ${run.export_id}.`
+        : `Approved for payment list by ${demoName(lastApproval?.approver_display_name)}, ${formatTime(lastApproval?.approved_at)}${lastApproval?.mode && lastApproval.mode !== "individual" ? ` (${lastApproval.mode})` : ""}.${run.export_blocked ? " Export is blocked by a related dispute." : " It goes out with the next export."}`;
+    case "ON_HOLD":
+      return `Held by ${run.blocking.length} check${run.blocking.length === 1 ? "" : "s"}. It stays off the payment list until a reviewer resolves ${run.blocking.length === 1 ? "it" : "them"}.`;
+    case "AWAITING_VENDOR":
+      return `Correction requested with reference [Ref ${run.token_active}]. A reply that carries it, from the vendor's registered address, is linked to this invoice and replaces it only if it passes every check.`;
+    case "REJECTED":
+      return run.primary?.code === "DUPLICATE_INVOICE" ? "Rejected automatically: this invoice was already received." : "Rejected by a reviewer.";
+    case "SUPERSEDED":
+      return "Replaced by a corrected invoice; it will not go on the payment list.";
+    case "SKIPPED":
+      return "Not processed as an invoice.";
+    case "FAILED":
+      return "The document could not be read. Retrying keeps this run and its history.";
+  }
+}
+
+function Decision({ run, onChanged }: { run: RunDetail; onChanged: () => void }) {
+  const tone = toneClasses[run.tone];
+  return (
+    <section aria-labelledby="decision-h" className={`rounded-md border p-4 ${tone}`}>
+      <h2 id="decision-h" className="text-lg font-bold">
+        {run.state === "CLEARED" ? "Cleared by checks" : run.state_label}
+      </h2>
+      <p className="mt-1">{stateSentence(run)}</p>
+      {inFlight(run) && <div className="reading-bar mt-3 h-1 rounded bg-carbon-wash" aria-hidden />}
+      {run.failure && run.state === "FAILED" && <p className="mt-2 text-sm">{run.failure}</p>}
+      {run.blocking.length > 0 && run.state !== "SUPERSEDED" && (
+        <ul className="mt-3 space-y-1.5">
+          {run.blocking.map((c) => (
+            <li key={c.code} className="text-sm">
+              <span className="font-semibold">{c.title}</span>
+              {c.next && <span> {c.next}</span>}
+              <span className="ml-2 text-xs opacity-70">{c.code}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Actions run={run} onChanged={onChanged} />
+    </section>
+  );
+}
+
+function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) {
+  const { name } = useIdentity();
+  const [open, setOpen] = useState<ReviewAction | null>(null);
+  const [note, setNote] = useState("");
+  const [confirm, setConfirm] = useState<{ action: ReviewAction; problems: string[] } | null>(null);
+  const [pending, setPending] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  if (!run.actions.length) return null;
+  const current = run.actions.find((a) => a.action === open) ?? null;
+
+  async function submit(action: ReviewAction, extra: Record<string, unknown> = {}) {
+    if (!name) return setMsg({ ok: false, text: "Choose who you are acting as (top right) first." });
+    setPending(true);
+    setMsg(null);
+    try {
+      await api.act(run.run_id, { action, actor: name, note: note.trim() || null, expectedVersion: run.version, ...extra });
+      setMsg({ ok: true, text: `${ACTION_TEXT[action].done}.` });
+      setOpen(null);
+      setNote("");
+      setConfirm(null);
+      onChanged();
+    } catch (e) {
+      if (isRefusal(e) && e.code === "NEEDS_CONFIRMATION") setConfirm({ action, problems: e.details?.problems ?? [e.reason] });
+      else setMsg({ ok: false, text: errorText(e) });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  const primary = (a: ReviewAction) => a === "approve" || a === "confirm_link" || a === "replace_approved" || a === "retry";
+
+  return (
+    <div className="mt-4 border-t border-current/20 pt-4">
+      <div className="flex flex-wrap gap-2">
+        {run.actions.map((a) => (
+          <button
+            key={a.action}
+            type="button"
+            disabled={pending}
+            aria-expanded={a.needsNote || a.action === "request_correction" ? open === a.action : undefined}
+            onClick={() => {
+              setMsg(null);
+              setConfirm(null);
+              if (a.needsNote || a.action === "request_correction") setOpen(open === a.action ? null : a.action);
+              else submit(a.action);
+            }}
+            className={
+              primary(a.action)
+                ? "rounded-md bg-approved-bg px-3 py-1.5 text-sm font-semibold text-approved-fg disabled:opacity-50"
+                : a.action === "reject"
+                  ? "rounded-md border border-bad-edge bg-surface px-3 py-1.5 text-sm font-semibold text-bad-fg disabled:opacity-50"
+                  : "rounded-md border border-rule-strong bg-surface px-3 py-1.5 text-sm font-semibold text-ink disabled:opacity-50"
+            }
+          >
+            {ACTION_TEXT[a.action].label}
+          </button>
+        ))}
+      </div>
+
+      {current && current.action === "request_correction" && run.correction_draft && (
+        <div className="mt-4 rounded-md border border-rule bg-surface p-3 text-ink">
+          <p className="text-sm text-ink-2">
+            Email sending is not connected in this demo. Copy this text into your email to{" "}
+            <span className="font-semibold text-ink">{run.correction_draft.to ?? "the vendor"}</span>, send it, then mark it as sent. The
+            reference {run.correction_draft.token} is issued when you do.
+          </p>
+          <p className="mt-3 text-sm font-semibold">Subject: {run.correction_draft.subject}</p>
+          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-rule bg-paper p-3 font-sans text-sm">{run.correction_draft.body}</pre>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(`Subject: ${run.correction_draft!.subject}\n\n${run.correction_draft!.body}`);
+                  setCopied(true);
+                } catch {
+                  setCopied(false);
+                  setMsg({ ok: false, text: "Copying is blocked in this browser. Select the text and copy it yourself." });
+                }
+              }}
+              className="rounded-md border border-rule-strong px-3 py-1.5 text-sm font-semibold"
+            >
+              {copied ? "Copied" : "Copy email text"}
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => submit("request_correction", { channel: "marked sent manually" })}
+              className="rounded-md bg-carbon px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Mark as sent manually
+            </button>
+          </div>
+        </div>
+      )}
+
+      {current && current.needsNote && (
+        <form
+          className="mt-4 rounded-md border border-rule bg-surface p-3 text-ink"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit(current.action);
+          }}
+        >
+          <label htmlFor="note" className="text-sm font-semibold">
+            Why? <span className="font-normal text-ink-2">A note is required and is kept in the history.</span>
+          </label>
+          <textarea
+            id="note"
+            required
+            rows={2}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            className="mt-2 w-full rounded-md border border-rule-strong bg-surface p-2 text-sm"
+            placeholder={current.action === "reject" ? "For example: price not agreed, vendor will reissue" : "For example: confirmed with the vendor by phone"}
+          />
+          <div className="mt-2 flex gap-2">
+            <button type="submit" disabled={pending || !note.trim()} className="rounded-md bg-carbon px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50">
+              {ACTION_TEXT[current.action].label}
+            </button>
+            <button type="button" onClick={() => setOpen(null)} className="rounded-md px-3 py-1.5 text-sm text-ink-2 hover:text-ink">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      {confirm && (
+        <div role="alert" className="mt-4 rounded-md border border-bad-edge bg-bad-bg p-3 text-bad-fg">
+          <p className="font-semibold">Approving this would bill more than the purchase order allows:</p>
+          <ul className="mt-1 list-disc pl-5 text-sm">
+            {confirm.problems.map((p) => (
+              <li key={p}>{p}</li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => submit(confirm.action, { confirmFailingChecks: true })}
+            className="mt-3 rounded-md bg-bad-fg px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Approve anyway
+          </button>
+        </div>
+      )}
+
+      {msg && (
+        <p role="status" className={`mt-3 text-sm font-semibold ${msg.ok ? "" : "text-bad-fg"}`}>
+          {msg.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+const STATUS_MARK: Record<StageView["status"], { text: string; cls: string }> = {
+  passed: { text: "Passed", cls: "text-ok-fg" },
+  held: { text: "Held", cls: "text-hold-fg font-semibold" },
+  rejected: { text: "Rejected", cls: "text-bad-fg font-semibold" },
+  skipped: { text: "Skipped", cls: "text-muted-fg" },
+  not_evaluated: { text: "Not reached", cls: "text-ink-3" },
+  running: { text: "Running", cls: "text-carbon-deep font-semibold" },
+  pending: { text: "Waiting", cls: "text-ink-3" },
+  failed: { text: "Failed", cls: "text-bad-fg font-semibold" },
+};
+
+/** The routing slip: every stage in order, who did it, and what it found. AI work is pencilled (dashed). */
+function RoutingSlip({ run }: { run: RunDetail }) {
+  const expected = inFlight(run) ? ["Is it an invoice?", "Does the document hold together?", "Vendor, sender and bank details", "Duplicates and corrections", "Which purchase order?", "Lines matched to the PO", "Prices and quantities against the PO", "Decision"] : [];
+  return (
+    <section aria-labelledby="slip-h" className="rounded-md border border-rule bg-surface">
+      <div className="border-b border-rule px-4 py-3">
+        <h2 id="slip-h" className="text-lg font-bold">Routing slip</h2>
+        <p className="text-sm text-ink-2">
+          Every check, in order. <span className="border-b-2 border-dashed border-graphite">Dashed</span> steps were done by AI; everything else is code that
+          checks the AI&apos;s reading.
+        </p>
+      </div>
+      <ol>
+        {run.stages.map((s) => (
+          <Stage key={s.id} s={s} />
+        ))}
+        {expected.slice(run.stages.length - 2).map((t, i) => (
+          <li key={t} className="flex gap-3 border-b border-rule px-4 py-3 text-ink-3 last:border-b-0">
+            <span className="num w-5 shrink-0 text-right">{i + 2}</span>
+            <span>{t}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function Stage({ s }: { s: StageView }) {
+  const mark = STATUS_MARK[s.status];
+  return (
+    <li className={`border-b border-rule px-4 py-3 last:border-b-0 ${s.by_ai ? "border-l-4 border-l-graphite [border-left-style:dashed]" : "border-l-4 border-l-transparent"}`}>
+      <div className="flex items-baseline gap-3">
+        <span className="num w-5 shrink-0 text-right text-ink-3">{s.n}</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+            <h3 className="font-semibold">{s.title}</h3>
+            <span className={`text-sm ${mark.cls}`}>{mark.text}</span>
+          </div>
+          <p className={`text-xs ${s.by_ai ? "text-graphite" : "text-ink-3"}`}>{s.by}</p>
+          {s.notes.filter(Boolean).length > 0 && (
+            <ul className="mt-1.5 space-y-0.5 break-words text-sm text-ink-2">
+              {s.notes.filter(Boolean).map((n, i) => (
+                <li key={i}>{n}</li>
+              ))}
+            </ul>
+          )}
+          {s.findings.length > 0 && (
+            <ul className="mt-2 space-y-2">
+              {s.findings.map((f, i) => (
+                <Finding key={`${f.code}-${i}`} f={f} />
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function Finding({ f }: { f: FindingView }) {
+  const [open, setOpen] = useState(f.blocking);
+  return (
+    <li className={`break-words rounded border px-3 py-2 text-sm ${f.blocking ? "border-hold-edge bg-hold-bg text-hold-fg" : "border-rule bg-paper text-ink-2"}`}>
+      <p>
+        <span className="font-semibold">{f.title}</span>
+        <span className="ml-2 text-xs opacity-70">{f.code}</span>
+      </p>
+      <p className="mt-0.5">{f.message}</p>
+      {f.evidence.length > 0 && (
+        <>
+          <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="mt-1 text-xs underline opacity-80 hover:opacity-100">
+            {open ? "Hide evidence" : "Show evidence"}
+          </button>
+          {open && (
+            <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+              {f.evidence.map((e) => (
+                <div key={e.key} className="contents">
+                  <dt className="opacity-75">{e.key}</dt>
+                  <dd className="num break-words font-semibold">{e.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </>
+      )}
+    </li>
+  );
+}
+
+function DocumentPanel({ run }: { run: RunDetail }) {
+  const ex = run.extraction;
+  const isImage = run.document?.content_type.startsWith("image/");
+  return (
+    <section aria-labelledby="doc-h" className="space-y-4">
+      <div className="rounded-md border border-rule bg-surface">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-rule px-4 py-3">
+          <h2 id="doc-h" className="text-lg font-bold">Document</h2>
+          {run.document && (
+            <a href={`/api/runs/${run.run_id}/file`} target="_blank" rel="noreferrer" className="text-sm text-carbon-deep underline">
+              Open {run.document.filename}
+            </a>
+          )}
+        </div>
+        {run.document ? (
+          <>
+            <p className="px-4 pt-2 text-xs text-ink-3">
+              {run.document.has_text_layer
+                ? `Digital PDF: ${run.document.text_chars} characters of text, used to check every value read.`
+                : "No text layer (a scan or a photo): values can only come from the image and need a human check."}
+            </p>
+            {isImage ? (
+              // eslint-disable-next-line @next/next/no-img-element -- the stored original, served by our API
+              <img src={`/api/runs/${run.run_id}/file`} alt={`Invoice image ${run.document.filename}`} className="mt-2 w-full" />
+            ) : (
+              <iframe title={`Invoice ${run.document.filename}`} src={`/api/runs/${run.run_id}/file#view=FitH`} className="mt-2 h-[32rem] w-full border-t border-rule" />
+            )}
+          </>
+        ) : (
+          <p className="px-4 py-6 text-sm text-ink-2">No file was stored for this run{run.failure ? `: ${run.failure}` : "."}</p>
+        )}
+      </div>
+      <div className="rounded-md border border-rule bg-surface">
+        <div className="border-b border-rule px-4 py-3">
+          <h2 className="text-lg font-bold">What was read</h2>
+          <p className="text-sm text-ink-2">
+            {run.extracted_by ? `By ${run.extracted_by.extractor}.` : "Nothing read yet."} Values are checked against the document text in step 3.
+          </p>
+        </div>
+        {ex ? <ReadValues run={run} /> : <p className="px-4 py-6 text-sm text-ink-2">{inFlight(run) ? "Reading" : "No values were read from this document."}</p>}
+      </div>
+    </section>
+  );
+}
+
+function ReadValues({ run }: { run: RunDetail }) {
+  const ex = run.extraction!;
+  const fields: [string, string | null][] = [
+    ["Seller", ex.vendor_name],
+    ["Seller GSTIN", ex.vendor_gstin],
+    ["Buyer", ex.buyer_name],
+    ["Document", `${ex.doc_type}${ex.document_title ? `, "${ex.document_title}"` : ""}`],
+    ["Invoice number", ex.invoice_number],
+    ["Invoice date", formatDate(ex.invoice_date)],
+    ["PO printed", ex.po_reference ?? "none"],
+    ["Prices", ex.price_basis === "exclusive" ? "GST added on top" : ex.price_basis === "inclusive" ? "GST included" : ex.price_basis === "none" ? "no GST" : "not stated"],
+    ["Bank account ending", ex.bank_account_last4 ?? "not printed"],
+  ];
+  return (
+    <div className="px-4 py-3">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        {fields.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="text-ink-3">{k}</dt>
+            <dd className="num break-words">{v ?? <span className="text-ink-3">not read</span>}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full min-w-[28rem] text-sm">
+          <thead className="border-b border-rule text-left text-ink-3">
+            <tr>
+              <th className="py-1 pr-2 font-normal">Line</th>
+              <th className="py-1 pr-2 text-right font-normal">Qty</th>
+              <th className="py-1 pr-2 text-right font-normal">Unit price</th>
+              <th className="py-1 pr-2 text-right font-normal">GST</th>
+              <th className="py-1 text-right font-normal">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ex.lines.map((l) => (
+              <tr key={l.line_no} className="border-b border-rule align-top">
+                <td className="py-1.5 pr-2">{l.description}</td>
+                <td className="num py-1.5 pr-2 text-right whitespace-nowrap">
+                  {l.qty ?? "?"} {l.uom}
+                </td>
+                <td className="num py-1.5 pr-2 text-right">{l.unit_price ?? "?"}</td>
+                <td className="num py-1.5 pr-2 text-right">{l.gst_rate != null ? `${trimPct(l.gst_rate)}%` : "?"}</td>
+                <td className="num py-1.5 text-right">{formatInr(l.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot className="num">
+            {([["Subtotal", ex.subtotal], ["CGST", ex.cgst], ["SGST", ex.sgst], ["IGST", ex.igst ?? null], ["Total", ex.total]] as const)
+              .filter(([, v]) => v != null)
+              .map(([k, v]) => (
+                <tr key={k} className={k === "Total" ? "font-bold" : "text-ink-2"}>
+                  <td colSpan={4} className="py-1 pr-2 text-right">
+                    {k}
+                  </td>
+                  <td className="py-1 text-right">{formatInr(v)}</td>
+                </tr>
+              ))}
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/** "0.18" -> "18" for display (string shift, no float). */
+function trimPct(rate: string): string {
+  const m = /^0?\.(\d+)$/.exec(rate) ?? /^(0)$/.exec(rate);
+  if (!m) return rate;
+  if (m[1] === "0") return "0";
+  const d = (m[1] + "00").slice(0, 2) + "." + m[1].slice(2);
+  return d.replace(/^0(?=\d)/, "").replace(/\.$/, "").replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
+}
+
+function Related({ run }: { run: RunDetail }) {
+  return (
+    <section aria-labelledby="rel-h" className="rounded-md border border-rule bg-surface p-4">
+      <h2 id="rel-h" className="text-lg font-bold">Related invoices</h2>
+      <p className="text-sm text-ink-2">Same vendor and invoice number, a correction, or a dispute.</p>
+      <ul className="mt-2 divide-y divide-rule">
+        {run.related.map((r) => (
+          <li key={r.run_id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+            <Link href={`/runs/${r.run_id}`} className="text-carbon-deep underline">
+              {r.vendor ?? r.filename} <span className="num">{r.invoice_number}</span>, {r.total}
+            </Link>
+            <span className="flex items-center gap-2">
+              <span className="text-xs text-ink-3">{formatTime(r.created_at)}</span>
+              <StateChip tone={r.tone} label={r.state_label} exported={r.exported} />
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function eventText(e: RunDetail["events"][number]): string {
+  const d = (e.details ?? {}) as Record<string, unknown>;
+  switch (e.type) {
+    case "RUN_RECEIVED":
+      return d.source === "email" ? `Received by email from ${d.sender}` : `Uploaded by ${d.uploader}`;
+    case "STATE_CHANGED":
+      return `${STATE_TEXT[e.from_state!]?.label ?? e.from_state} to ${STATE_TEXT[e.to_state!]?.label ?? e.to_state} (transition ${e.transition})${e.code ? `, ${e.code}` : ""}`;
+    case "DECIDED":
+      return `Decided ${d.outcome}${Array.isArray(d.blocking) && d.blocking.length ? `: ${(d.blocking as string[]).join(", ")}` : ""}`;
+    case "CORRECTION_SENT":
+      return `Correction ${d.channel === "sent" ? "sent" : "marked sent manually"} with reference ${d.token}`;
+    case "EXPORTED":
+      return `Exported to payment list ${d.export_id}`;
+    case "INVALID_TRANSITION_BLOCKED":
+      return `Refused: ${d.action}. ${d.reason}`;
+    case "ACTION_REPEAT_IGNORED":
+      return `Ignored a repeated or outdated click: ${d.action}`;
+    case "DELIVERY_REPEAT_IGNORED":
+      return "Ignored a repeated delivery of the same file";
+    case "NOTE":
+      return d.export_blocked_by ? "Export blocked by a related dispute" : d.export_block_lifted ? "Export block lifted" : "Note";
+    default:
+      return e.type;
+  }
+}
+
+function History({ run }: { run: RunDetail }) {
+  return (
+    <section aria-labelledby="hist-h" className="rounded-md border border-rule bg-surface">
+      <div className="border-b border-rule px-4 py-3">
+        <h2 id="hist-h" className="text-lg font-bold">History</h2>
+        <p className="text-sm text-ink-2">Every change and refusal, as recorded. Names are demo identities, not verified users.</p>
+      </div>
+      <ol className="divide-y divide-rule">
+        {run.events.map((e) => (
+          <li key={e.seq} className="grid gap-1 px-4 py-2 text-sm sm:grid-cols-[9rem_10rem_1fr]">
+            <span className="num text-ink-3">{formatTime(e.at)}</span>
+            <span className="text-ink-2">{e.actor === "system" ? "System" : demoName(e.actor)}</span>
+            <span>
+              {eventText(e)}
+              {e.note && <span className="block text-ink-2">Note: {e.note}</span>}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}

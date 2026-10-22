@@ -8,18 +8,25 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:pg": "vitest run --config vitest.pg.config.mts",
+    "test:live": "vitest run --config vitest.live.config.mts",
+    "demo:reset": "node scripts/demo-reset.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/atkinson-hyperlegible-next": "5.3.0",
     "decimal.js": "^10.6.0",
     "next": "16.4.2",
+    "pg": "8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "unpdf": "1.8.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "@types/node": "^24.19.2",
+    "@types/pg": "8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
