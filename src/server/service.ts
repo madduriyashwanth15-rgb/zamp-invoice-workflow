@@ -78,6 +78,8 @@ export interface ActionBody {
   note?: string | null;
   expectedVersion?: number;
   confirmFailingChecks?: boolean;
+  /** Override only: the PO a reviewer names when the code found none (spec v1.4 C4b). */
+  poNumber?: string | null;
   channel?: "sent" | "marked sent manually";
 }
 
@@ -87,7 +89,7 @@ export async function act(runId: string, body: ActionBody): Promise<ActionResult
   switch (body.action) {
     case "approve": return approve(deps, [runId], ctx);
     case "manual_hold": return manualHold(deps, runId, ctx);
-    case "override_approve": return overrideApprove(deps, runId, { ...ctx, confirmFailingChecks: body.confirmFailingChecks });
+    case "override_approve": return overrideApprove(deps, runId, { ...ctx, confirmFailingChecks: body.confirmFailingChecks, poNumber: body.poNumber ?? null });
     case "reject": return reject(deps, runId, ctx);
     case "request_correction":
       if (body.channel !== "sent") return requestCorrection(deps, runId, { ...ctx, channel: "marked sent manually" });

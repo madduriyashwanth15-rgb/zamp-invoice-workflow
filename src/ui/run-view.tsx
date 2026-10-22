@@ -162,6 +162,7 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
   const { name } = useIdentity();
   const [open, setOpen] = useState<ReviewAction | null>(null);
   const [note, setNote] = useState("");
+  const [po, setPo] = useState("");
   const [confirm, setConfirm] = useState<{ action: ReviewAction; problems: string[] } | null>(null);
   const [pending, setPending] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -179,6 +180,7 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
       setMsg({ ok: true, text: doneText ?? `${ACTION_TEXT[action].done}.` });
       setOpen(null);
       setNote("");
+      setPo("");
       setConfirm(null);
       onChanged();
     } catch (e) {
@@ -290,9 +292,29 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
           className="mt-4 rounded-md border border-rule bg-surface p-3 text-ink"
           onSubmit={(e) => {
             e.preventDefault();
-            submit(current.action);
+            submit(current.action, current.po_choices ? { poNumber: po } : {});
           }}
         >
+          {current.po_choices && (
+            <div className="mb-3">
+              <label htmlFor="po-choice" className="text-sm font-semibold">
+                Which purchase order is this for?{" "}
+                <span className="font-normal text-ink-2">No PO was found on the invoice. Approving counts it against the PO you choose.</span>
+              </label>
+              {current.po_choices.length > 0 ? (
+                <select id="po-choice" required value={po} onChange={(e) => setPo(e.target.value)} className="mt-2 block w-full max-w-xs rounded-md border border-rule-strong bg-surface p-2 text-sm">
+                  <option value="">Choose a PO</option>
+                  {current.po_choices.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <p className="mt-2 text-sm text-bad-fg">This vendor has no open purchase order, so it cannot be approved against one. Reject it or request a correction.</p>
+              )}
+            </div>
+          )}
           <label htmlFor="note" className="text-sm font-semibold">
             Why? <span className="font-normal text-ink-2">A note is required and is kept in the history.</span>
           </label>
@@ -306,7 +328,7 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
             placeholder={current.action === "reject" ? "For example: price not agreed, vendor will reissue" : "For example: confirmed with the vendor by phone"}
           />
           <div className="mt-2 flex gap-2">
-            <button type="submit" disabled={pending || !note.trim()} className="rounded-md bg-carbon px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50">
+            <button type="submit" disabled={pending || !note.trim() || (Boolean(current.po_choices) && !po)} className="rounded-md bg-carbon px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50">
               {ACTION_TEXT[current.action].label}
             </button>
             <button type="button" onClick={() => setOpen(null)} className="rounded-md px-3 py-1.5 text-sm text-ink-2 hover:text-ink">
@@ -327,7 +349,7 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
           <button
             type="button"
             disabled={pending}
-            onClick={() => submit(confirm.action, { confirmFailingChecks: true })}
+            onClick={() => submit(confirm.action, { confirmFailingChecks: true, ...(po ? { poNumber: po } : {}) })}
             className="mt-3 rounded-md bg-bad-fg px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
           >
             Approve anyway

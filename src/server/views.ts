@@ -310,7 +310,7 @@ export function detail(run: RunRecord, state: Pick<StoreState, "runs" | "documen
   }
   relatedIds.delete(run.run_id);
   const token = [...state.tokens].find(([, id]) => id === run.run_id)?.[0] ?? null;
-  const actions = availableActions(run, state);
+  const actions = availableActions(run, state, ref);
   const review = reviewStage(run, logs.events, actions);
   return {
     ...summarize(run, ref),

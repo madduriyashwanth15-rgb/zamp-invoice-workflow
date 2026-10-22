@@ -13,6 +13,7 @@ Related (repository folder planning/): test-matrix.md v1.3, implementation-plan.
 - P7. AI outputs are proposals; none changes state or money.
 - P8. The product never claims payment or payment authorisation (section 12).
 - P9. Chain invariant: for one vendor and one normalised invoice number, at most one run can be CLEARED or APPROVED at any time.
+- P9b (v1.4). The invariant also holds when no chain could be built (vendor unknown, reading failed): an approval by override, link confirmation or replacement is refused when another CLEARED or APPROVED run has the same file (sha256), or the same normalised invoice number from the same vendor (master id, else the normalised printed name). Refusal reason: POSSIBLE_DOUBLE_BILLING. An override is never offered for CREDIT_NOTE_UNSUPPORTED (G3) or for a run whose total was never read.
 - P10. The product never presents the reviewer's display name as a verified identity and provides no production-grade access control (section 12).
 
 ## 2. Logical data model
@@ -103,6 +104,7 @@ Normalised number: split on non-alphanumerics, uppercase, strip leading zeros fr
 - C2. Quantity + consumed > ordered: QTY_EXCEEDS_PO.
 - C3. Mapped amounts + consumed > PO subtotal x 1.02: PO_AMOUNT_EXCEEDED (equal allowed). Charge and unmapped lines excluded (they hold under their own codes).
 - C4. Consumption counts CLEARED and APPROVED; override approvals re-run C2/C3.
+- C4b (v1.4). A held line on a known PO (unmapped, unit unverified, AI proposal rejected, unapproved charge, duplicate mapping) records its pre-tax amount at PO level (line 0), as a lump-sum line does; it counts only once the run is approved. When no PO was found for a known vendor, the override names one of the vendor's open POs; lines that map by M1 then count per PO line, the rest at PO level, and C2/C3 re-run against it.
 - C5. Total > Rs 2,00,000: APPROVAL_LIMIT_EXCEEDED (P2).
 Settings (shown in UI): tolerances, rounding, approval limit, allowlist, catalog, charge keywords, lump-sum markers.
 
@@ -140,11 +142,11 @@ States: RECEIVED, PROCESSING, SKIPPED, CLEARED, ON_HOLD, AWAITING_VENDOR, APPROV
 | 2 | PROCESSING | SKIPPED / CLEARED / ON_HOLD / REJECTED | decision | system | no | section 9; P9 |
 | 3 | PROCESSING | FAILED | error after retries | system | no | |
 | 4 | FAILED | PROCESSING | retry, same run id | user | no | logged |
-| 5 | SKIPPED | PROCESSING | process as invoice | user | yes | G1 bypassed for this run and recorded; every other check runs (A10) |
+| 5 | SKIPPED | PROCESSING | process as invoice | user | yes | G1 bypassed for this run and recorded; every other check runs (A10); refused when no file is stored |
 | 6 | CLEARED | APPROVED | approve, individual or batch | user | no | display name and time recorded; not export-blocked; P9 |
 | 7 | CLEARED | ON_HOLD | manual hold | user | yes | code MANUAL_HOLD (A5) |
 | 8 | CLEARED | ON_HOLD | RELATED_INVOICE_DISPUTE (D3) | system | no | consumption released |
-| 9 | ON_HOLD | APPROVED | override | user | yes | C2/C3 re-run (second confirmation if failing); P9; blocked if the counterpart in D3 is exported; never supersedes |
+| 9 | ON_HOLD | APPROVED | override | user | yes | C2/C3 re-run (second confirmation if failing); P9 and P9b; C4b (PO named when none was found); blocked if the counterpart in D3 is exported; never supersedes |
 | 10 | ON_HOLD | REJECTED | reject | user | yes | |
 | 11 | ON_HOLD | AWAITING_VENDOR | correction email sent or marked sent manually | user | no | token issued and logged |
 | 12 | AWAITING_VENDOR | ON_HOLD | vendor reply held (D2) | system | no | |
@@ -244,8 +246,8 @@ Decided by the owner on 23 Oct 2026 (audit decisions Q1-Q11). Rows marked implem
 | A printed bank account the reader leaves out is held: MISSING_REQUIRED_FIELD | K4b | Q2 | Implemented (section 4) |
 | Read as an invoice but worded as a quotation, proforma or challan: CLASSIFICATION_CONFLICT | G1b | Audit A03 | Implemented (section 4) |
 | AI line matches need code-checked support, not only a matching unit | M3b | Q3 | Implemented (section 7) |
-| An override counts PO use; the reviewer names the PO when none was found | C4, row 9 | Q1 | Pending |
-| Duplicate guard at override (same file or same number and vendor); no override of CREDIT_NOTE_UNSUPPORTED | P9, rows 9 and 14 | Q4 | Pending |
+| An override counts PO use; the reviewer names the PO when none was found | C4b, row 9 | Q1 | Implemented (sections 8, 11) |
+| Duplicate guard at override (same file or same number and vendor); no override of CREDIT_NOTE_UNSUPPORTED | P9b, rows 9, 14, 16, 17 | Q4 | Implemented (sections 1, 11). Also: no override when the total was never read (a payment needs an amount; flagged to the owner) |
 | Random reply tokens; DMARC "gray" still auto-links | D2 | Q7 | Pending |
 | Buyer GSTIN is not checked: stated limitation | Section 15 | Q8 | Pending |
 | Bank, vendor and sender overrides need a callback record and a second confirmation | Row 9 | Q9 | Pending |
