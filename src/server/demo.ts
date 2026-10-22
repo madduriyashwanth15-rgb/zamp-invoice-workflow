@@ -70,9 +70,15 @@ export async function replay(testId: string): Promise<EmailIntakeResult> {
   return ingestEmail(deps, stamped, async (i) => new Uint8Array(readFileSync(path.join(TEST_DATA_DIR, email.attachments[i].path))));
 }
 
-/** Empties every run (the extraction cache is kept). */
-export async function resetDemo(): Promise<void> {
+/**
+ * Empties every run. Saved readings (the extraction cache) are kept unless `forgetReadings` is set; then the next
+ * run of each file calls the AI again, which is what a live demo of real reading needs (and costs quota).
+ * Returns how many saved readings were forgotten (null when none were asked to be, or the MOCK reader is active).
+ */
+export async function resetDemo(opts: { forgetReadings?: boolean } = {}): Promise<{ forgotten: number | null }> {
   const rt = runtime();
   if (rt.deps.store instanceof PgRunStore) await rt.deps.store.reset();
   else rt.deps.store = new MemoryRunStore();
+  if (!opts.forgetReadings || !rt.cache) return { forgotten: null };
+  return { forgotten: await rt.cache.clear() };
 }

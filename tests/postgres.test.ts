@@ -5,6 +5,7 @@ import { MemoryRunStore } from "@/domain/runs/memory-store";
 import type { StoreState } from "@/domain/runs/types";
 import { ingest, type ExtractionAttempt, type Extractor, type ExtractorInput, type PipelineDeps } from "@/domain/runs/pipeline";
 import { encode } from "@/server/db/codec";
+import { PgExtractionCache } from "@/server/db/pg-cache";
 import { PgRunStore } from "@/server/db/pg-store";
 import { extractionOf, textFrom } from "./support/direct";
 import { makeDeps, reference, runGolden } from "./support/harness";
@@ -144,5 +145,18 @@ describe.skipIf(!enabled)("Postgres store", { timeout: 300_000 }, () => { // net
     const events = (await store.logs(run.run_id)).events;
     expect(events.slice(before).map((e) => e.actor)).toEqual(["first", "second", "third"]);
     expect(events.map((e) => e.seq)).toEqual([...events.map((e) => e.seq)].sort((a, b) => a - b));
+  });
+
+  it("saved readings: clear() forgets every one (demo reset option) and reports how many", async () => {
+    const store = freshPgStore();
+    const schema = (store as unknown as { schema: string }).schema;
+    const cache = new PgExtractionCache(testPool(), store, schema);
+    const one = extractionOf("S1");
+    await cache.set("a|extract-v3|m", one);
+    await cache.set("b|extract-v3|m", extractionOf("S2"));
+    expect((await cache.get("a|extract-v3|m"))?.invoice_number).toBe(one.invoice_number);
+    expect(await cache.clear()).toBe(2);
+    expect(await cache.get("a|extract-v3|m")).toBeNull();
+    expect(await cache.clear()).toBe(0);
   });
 });

@@ -105,7 +105,8 @@ matrix pass rule; it must also agree with the independent oracle (`oracle_result
   delivers to the Resend account's own address; for any other vendor address the send is refused, nothing changes,
   and the reviewer can copy the text and mark it sent manually.
 - Free-tier AI quotas are small (see Model choice). Readings are cached by file, prompt and model and survive a demo
-  reset, so replaying the same files costs no calls.
+  reset, so replaying the same files costs no calls. To show a fresh AI reading, tick "Also forget saved readings"
+  when resetting on the Demo emails page.
 - The `/demo` page simulates the email provider by replaying recorded test emails; intake and checks are the real ones.
 
 ## Secrets

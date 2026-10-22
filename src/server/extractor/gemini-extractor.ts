@@ -20,6 +20,8 @@ import { EXTRACTION_PROMPT_VERSION, MAPPING_PROMPT_VERSION, extractionPrompt, ma
 export interface ExtractionCache {
   get(key: string): Promise<Extraction | null>;
   set(key: string, value: Extraction): Promise<void>;
+  /** Forgets every saved reading (demo reset option); returns how many were removed. */
+  clear(): Promise<number>;
 }
 
 export class MemoryExtractionCache implements ExtractionCache {
@@ -29,6 +31,11 @@ export class MemoryExtractionCache implements ExtractionCache {
   }
   async set(k: string, v: Extraction) {
     this.m.set(k, structuredClone(v));
+  }
+  async clear() {
+    const n = this.m.size;
+    this.m.clear();
+    return n;
   }
 }
 

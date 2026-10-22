@@ -9,7 +9,7 @@ import { loadReferenceData } from "@/fixtures/load";
 import { PgExtractionCache } from "@/server/db/pg-cache";
 import { PgRunStore } from "@/server/db/pg-store";
 import { AnswerKeyExtractor, AnswerKeyProposer } from "@/server/extractor/answer-key-extractor";
-import { GeminiExtractor, GeminiMappingProposer, MemoryExtractionCache } from "@/server/extractor/gemini-extractor";
+import { GeminiExtractor, GeminiMappingProposer, MemoryExtractionCache, type ExtractionCache } from "@/server/extractor/gemini-extractor";
 import { transportFromEnv } from "@/server/extractor/gemini-transport";
 import { ResendSender, type MailSender } from "@/server/correction-email";
 
@@ -38,6 +38,8 @@ export interface Runtime {
   info: RuntimeInfo;
   /** Present when the app sends correction emails itself. */
   mail: { sender: MailSender; replyTo: string } | null;
+  /** Saved readings of the real reader; null with the MOCK extractor (it reads nothing, so nothing is saved). */
+  cache: ExtractionCache | null;
 }
 
 export const DEFAULT_RESEND_FROM = "SpiceRoute AP (demo) <onboarding@resend.dev>";
@@ -84,9 +86,10 @@ function build(): Runtime {
 
   let extractor: Extractor;
   let proposer: MappingProposer;
+  let cache: ExtractionCache | null = null;
   if (key && model) {
     const transport = transportFromEnv(key);
-    const cache = pool && pgStore ? new PgExtractionCache(pool, pgStore) : new MemoryExtractionCache();
+    cache = pool && pgStore ? new PgExtractionCache(pool, pgStore) : new MemoryExtractionCache();
     extractor = new GeminiExtractor({ model, fallbackModel, transport, reference, cache });
     proposer = new GeminiMappingProposer({ model, fallbackModel, transport, reference });
   } else {
@@ -108,6 +111,7 @@ function build(): Runtime {
   return {
     deps,
     mail,
+    cache,
     info: {
       store: dbUrl ? "postgres" : "memory",
       extractor: key && model ? "gemini" : "mock",

@@ -3,7 +3,8 @@ import type { Extraction } from "@/domain/extraction-schema";
 import type { ExtractionCache } from "@/server/extractor/gemini-extractor";
 import type { PgRunStore } from "./pg-store";
 
-/** Extraction cache in Postgres (spec 14: sha256 + prompt version + model). Survives deploys and demo resets. */
+/** Extraction cache in Postgres (spec 14: sha256 + prompt version + model). Survives deploys, and demo resets
+ * unless the reset asks to forget saved readings. */
 export class PgExtractionCache implements ExtractionCache {
   constructor(private pool: Pool, private store: PgRunStore, private schema = "public") {}
 
@@ -19,5 +20,11 @@ export class PgExtractionCache implements ExtractionCache {
       `INSERT INTO "${this.schema}".extraction_cache (cache_key, data) VALUES ($1, $2::jsonb) ON CONFLICT (cache_key) DO UPDATE SET data = EXCLUDED.data`,
       [key, JSON.stringify(value)],
     );
+  }
+
+  async clear(): Promise<number> {
+    await this.store.ensureSchema();
+    const r = await this.pool.query(`DELETE FROM "${this.schema}".extraction_cache`);
+    return r.rowCount ?? 0;
   }
 }

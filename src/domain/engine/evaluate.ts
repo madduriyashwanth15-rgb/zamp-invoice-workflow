@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { addDays } from "../dates";
 import { REASON_CODES, SEVERITY, type ReasonCode } from "../codes";
 import { isLumpSum, matchedChargeKeywords } from "../detect";
 import type { Extraction, ExtractionLine } from "../extraction-schema";
@@ -51,10 +52,6 @@ class Trace {
   }
 }
 
-function addDays(iso: string, days: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
-}
 
 /** Pre-tax amount of a line in paise: exclusive / none as printed; inclusive divided by (1 + rate). */
 function preTaxPaise(line: ExtractionLine, basis: PriceBasis): Paise {

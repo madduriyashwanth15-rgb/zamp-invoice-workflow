@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { ReviewAction } from "@/domain/runs/queries";
 import type { FindingView, RunDetail, StageView } from "@/server/views";
 import { formatDate, formatInr, formatTime } from "@/lib/format";
-import { ACTION_TEXT, STATE_TEXT } from "@/lib/reason-text";
+import { ACTION_TEXT, CODE_TEXT, STATE_TEXT } from "@/lib/reason-text";
 import { api, errorText, isRefusal } from "./api";
 import { StateChip, toneClasses } from "./chips";
 import { useIdentity } from "./identity";
@@ -60,8 +60,8 @@ function Header({ run }: { run: RunDetail }) {
   const facts: [string, React.ReactNode][] = [
     ["Invoice number", run.invoice_number ? <span className="num">{run.invoice_number}</span> : "not read"],
     ["Invoice date", formatDate(run.invoice_date) ?? "not read"],
-    ["Purchase order", run.po_number ?? "none matched"],
-    ["Due (per terms)", formatDate(run.due_date) ?? "set when cleared"],
+    ["Purchase order", run.po_number ?? (run.po_checked ? "none matched" : <span className="font-normal text-ink-3">not checked</span>)],
+    ["Due (per terms)", formatDate(run.due_date) ?? <span className="font-normal text-ink-3">{dueMissing(run)}</span>],
     [run.source === "email" ? "Emailed by" : "Uploaded by", run.source === "email" ? run.sender_email : `${run.uploader} (demo identity)`],
     ["Run", <span key="ref" className="num">{run.ref}</span>],
   ];
@@ -70,7 +70,9 @@ function Header({ run }: { run: RunDetail }) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{run.vendor ?? run.filename ?? "Unread document"}</h1>
-          {!run.vendor_known && run.vendor && <p className="text-sm text-hold-fg">Name as printed; not found in the vendor master</p>}
+          {!run.vendor_known && run.vendor && (run.vendor_checked
+            ? <p className="text-sm text-hold-fg">Name as printed; not found in the vendor master</p>
+            : <p className="text-sm text-ink-3">Name as printed; not checked against the vendor master{run.state === "SKIPPED" ? " (not an invoice)" : ""}</p>)}
         </div>
         <div className="text-right">
           <p className="num text-3xl font-bold">{run.total ?? <span className="text-xl font-normal text-ink-3">total not read</span>}</p>
@@ -89,6 +91,13 @@ function Header({ run }: { run: RunDetail }) {
       </dl>
     </header>
   );
+}
+
+/** Why the due date is empty: it is set from the vendor's payment terms once the invoice clears or is approved. */
+function dueMissing(run: RunDetail): string {
+  if (["SKIPPED", "REJECTED", "SUPERSEDED", "FAILED"].includes(run.state)) return "none";
+  if (!run.vendor_known || !run.invoice_date) return "not set: no vendor terms or date";
+  return "set when approved";
 }
 
 /** U1: every displayed reviewer name carries its demo-identity label. */
@@ -344,18 +353,21 @@ const STATUS_MARK: Record<StageView["status"], { text: string; cls: string }> = 
   running: { text: "Running", cls: "text-carbon-deep font-semibold" },
   pending: { text: "Waiting", cls: "text-ink-3" },
   failed: { text: "Failed", cls: "text-bad-fg font-semibold" },
+  awaiting_review: { text: "Waiting for a reviewer", cls: "text-wait-fg font-semibold" },
+  reviewed: { text: "Done", cls: "text-ink font-semibold" },
+  not_needed: { text: "No action needed", cls: "text-ink-3" },
 };
 
 /** The routing slip: every stage in order, who did it, and what it found. AI work is pencilled (dashed). */
 function RoutingSlip({ run }: { run: RunDetail }) {
-  const expected = inFlight(run) ? ["Is it an invoice?", "Does the document hold together?", "Vendor, sender and bank details", "Duplicates and corrections", "Which purchase order?", "Lines matched to the PO", "Prices and quantities against the PO", "Decision"] : [];
+  const expected = inFlight(run) ? ["Is it an invoice?", "Does the document hold together?", "Vendor, sender and bank details", "Duplicates and corrections", "Which purchase order?", "Lines matched to the PO", "Prices and quantities against the PO", "Decision", "Reviewer decision"] : [];
   return (
     <section aria-labelledby="slip-h" className="rounded-md border border-rule bg-surface">
       <div className="border-b border-rule px-4 py-3">
         <h2 id="slip-h" className="text-lg font-bold">Routing slip</h2>
         <p className="text-sm text-ink-2">
-          Every check, in order. <span className="border-b-2 border-dashed border-graphite">Dashed</span> steps were done by AI; everything else is code that
-          checks the AI&apos;s reading.
+          Every check, in order, then the reviewer. <span className="border-b-2 border-dashed border-graphite">Dashed</span> steps were done by AI; the checks
+          are code that verifies the AI&apos;s reading.
         </p>
       </div>
       <ol>
@@ -382,13 +394,17 @@ function Stage({ s }: { s: StageView }) {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3">
             <h3 className="font-semibold">{s.title}</h3>
-            <span className={`text-sm ${mark.cls}`}>{mark.text}</span>
+            <span className={`text-sm ${mark.cls}`}>{s.status_text ?? mark.text}</span>
           </div>
           <p className={`text-xs ${s.by_ai ? "text-graphite" : "text-ink-3"}`}>{s.by}</p>
-          {s.notes.filter(Boolean).length > 0 && (
+          {s.notes.filter((n) => n.text).length > 0 && (
             <ul className="mt-1.5 space-y-0.5 break-words text-sm text-ink-2">
-              {s.notes.filter(Boolean).map((n, i) => (
-                <li key={i}>{n}</li>
+              {s.notes.filter((n) => n.text).map((n, i) => (
+                <li key={i}>
+                  {n.at && <span className="num mr-2 text-xs text-ink-3">{formatTime(n.at)}</span>}
+                  {n.text}
+                  {n.rule && <span className="num ml-2 text-xs text-ink-3" title="Rule in the workflow spec">{n.rule}</span>}
+                </li>
               ))}
             </ul>
           )}
@@ -460,7 +476,18 @@ function DocumentPanel({ run }: { run: RunDetail }) {
               // eslint-disable-next-line @next/next/no-img-element -- the stored original, served by our API
               <img src={`/api/runs/${run.run_id}/file`} alt={`Invoice image ${run.document.filename}`} className="mt-2 w-full" />
             ) : (
-              <iframe title={`Invoice ${run.document.filename}`} src={`/api/runs/${run.run_id}/file#view=FitH`} className="mt-2 h-[32rem] w-full border-t border-rule" />
+              <>
+                {/* Phone browsers do not show PDFs inside a page reliably: offer the file itself instead. */}
+                <a
+                  href={`/api/runs/${run.run_id}/file`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mx-4 my-3 block rounded-md border border-rule px-3 py-2 text-center text-sm font-semibold text-carbon-deep sm:hidden"
+                >
+                  Open the PDF
+                </a>
+                <iframe title={`Invoice ${run.document.filename}`} src={`/api/runs/${run.run_id}/file#view=FitH`} className="mt-2 hidden h-[32rem] w-full border-t border-rule sm:block" />
+              </>
             )}
           </>
         ) : (
@@ -503,7 +530,32 @@ function ReadValues({ run }: { run: RunDetail }) {
           </div>
         ))}
       </dl>
-      <div className="mt-4 overflow-x-auto">
+      {/* Phones: each line as a short block; the table needs more width than a phone has. */}
+      <ul className="mt-4 divide-y divide-rule border-y border-rule text-sm sm:hidden">
+        {ex.lines.map((l) => (
+          <li key={l.line_no} className="py-2">
+            <p className="break-words">{l.description}</p>
+            <div className="num mt-0.5 flex items-baseline justify-between gap-3 text-ink-2">
+              <span>
+                {l.qty ?? "?"} {l.uom} × {l.unit_price ?? "?"}
+                <span className="text-ink-3">, GST {l.gst_rate != null ? `${trimPct(l.gst_rate)}%` : "?"}</span>
+              </span>
+              <span className="font-semibold text-ink">{formatInr(l.amount)}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <dl className="num mt-2 space-y-0.5 text-sm sm:hidden">
+        {([["Subtotal", ex.subtotal], ["CGST", ex.cgst], ["SGST", ex.sgst], ["IGST", ex.igst ?? null], ["Total", ex.total]] as const)
+          .filter(([, v]) => v != null)
+          .map(([k, v]) => (
+            <div key={k} className={`flex justify-between ${k === "Total" ? "font-bold" : "text-ink-2"}`}>
+              <dt>{k}</dt>
+              <dd>{formatInr(v)}</dd>
+            </div>
+          ))}
+      </dl>
+      <div className="mt-4 hidden overflow-x-auto sm:block">
         <table className="w-full min-w-[28rem] text-sm">
           <thead className="border-b border-rule text-left text-ink-3">
             <tr>
@@ -582,9 +634,11 @@ function eventText(e: RunDetail["events"][number]): string {
     case "RUN_RECEIVED":
       return d.source === "email" ? `Received by email from ${d.sender}` : `Uploaded by ${d.uploader}`;
     case "STATE_CHANGED":
-      return `${STATE_TEXT[e.from_state!]?.label ?? e.from_state} to ${STATE_TEXT[e.to_state!]?.label ?? e.to_state} (transition ${e.transition})${e.code ? `, ${e.code}` : ""}`;
-    case "DECIDED":
-      return `Decided ${d.outcome}${Array.isArray(d.blocking) && d.blocking.length ? `: ${(d.blocking as string[]).join(", ")}` : ""}`;
+      return `${STATE_TEXT[e.from_state!]?.label ?? e.from_state} to ${STATE_TEXT[e.to_state!]?.label ?? e.to_state}${e.code ? ` (${CODE_TEXT[e.code]?.title ?? e.code})` : ""}`;
+    case "DECIDED": {
+      const reasons = Array.isArray(d.blocking) ? (d.blocking as (keyof typeof CODE_TEXT)[]).map((c) => CODE_TEXT[c]?.title ?? c) : [];
+      return `Checks finished: ${STATE_TEXT[d.outcome as RunDetail["state"]]?.label ?? d.outcome}${reasons.length ? `. ${reasons.join("; ")}` : ""}`;
+    }
     case "CORRECTION_SENT":
       return `Correction ${d.channel === "sent" ? `email sent${d.to ? ` to ${d.to}` : ""}` : "marked sent manually"} with reference ${d.token}`;
     case "EXPORTED":
@@ -611,10 +665,10 @@ function History({ run }: { run: RunDetail }) {
       </div>
       <ol className="divide-y divide-rule">
         {run.events.map((e) => (
-          <li key={e.seq} className="grid gap-1 px-4 py-2 text-sm sm:grid-cols-[9rem_10rem_1fr]">
+          <li key={e.seq} className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 px-4 py-2 text-sm sm:grid-cols-[9rem_10rem_1fr]">
             <span className="num text-ink-3">{formatTime(e.at)}</span>
             <span className="text-ink-2">{e.actor === "system" ? "System" : demoName(e.actor)}</span>
-            <span>
+            <span className="col-span-2 sm:col-span-1">
               {eventText(e)}
               {e.note && <span className="block text-ink-2">Note: {e.note}</span>}
             </span>

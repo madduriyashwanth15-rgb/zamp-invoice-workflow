@@ -13,11 +13,19 @@ export function DemoTools() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [result, setResult] = useState<Record<string, { ok: boolean; text: string; runId?: string }>>({});
   const [confirm, setConfirm] = useState("");
+  const [forget, setForget] = useState(false);
+  const [realReader, setRealReader] = useState(false);
   const [resetMsg, setResetMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [inbox, setInbox] = useState<string | null>(null);
 
   useEffect(() => {
-    api.status().then((i) => setInbox(i.correctionEmail.mode === "send" ? i.correctionEmail.reply_to : null), () => setInbox(null));
+    api.status().then(
+      (i) => {
+        setInbox(i.correctionEmail.mode === "send" ? i.correctionEmail.reply_to : null);
+        setRealReader(i.extractor === "gemini");
+      },
+      () => setInbox(null),
+    );
   }, []);
 
   useEffect(() => {
@@ -37,12 +45,18 @@ export function DemoTools() {
   }
 
   async function reset() {
-    const res = await fetch("/api/demo/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actor: name, confirm }) });
+    const res = await fetch("/api/demo/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actor: name, confirm, forgetReadings: forget }),
+    });
     const body = await res.json().catch(() => ({}));
-    setResetMsg(res.ok ? { ok: true, text: "All invoices and history were removed." } : { ok: false, text: body.reason ?? `The server answered ${res.status}` });
+    const forgotten = typeof body.forgotten === "number" ? ` ${body.forgotten} saved reading${body.forgotten === 1 ? " was" : "s were"} forgotten: the next run of each file calls the AI again.` : "";
+    setResetMsg(res.ok ? { ok: true, text: `All invoices and history were removed.${forgotten}` } : { ok: false, text: body.reason ?? `The server answered ${res.status}` });
     if (res.ok) {
       setResult({});
       setConfirm("");
+      setForget(false);
     }
   }
 
@@ -120,7 +134,15 @@ export function DemoTools() {
 
       <section aria-labelledby="reset-h" className="rounded-md border border-bad-edge bg-surface p-4">
         <h2 id="reset-h" className="text-lg font-bold">Start again</h2>
-        <p className="mt-1 text-sm text-ink-2">Removes every invoice, approval, export and history entry. Saved readings are kept, so the same files read instantly.</p>
+        <p className="mt-1 text-sm text-ink-2">Removes every invoice, approval, export and history entry. Saved readings are kept unless you tick the box, so the same files read instantly.</p>
+        {realReader && (
+          <label className="mt-3 flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5 h-4 w-4" checked={forget} onChange={(e) => setForget(e.target.checked)} />
+            <span>
+              Also forget saved readings. The next run of each file is read by the AI again (uses AI quota, takes a few seconds per file).
+            </span>
+          </label>
+        )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <label htmlFor="confirm" className="text-sm">
             Type RESET to confirm

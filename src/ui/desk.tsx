@@ -150,6 +150,12 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const selectable = filter === "cleared";
   const selected = runs.filter((r) => picked.has(r.run_id));
+  const toggle = (id: string, on: boolean) => {
+    const next = new Set(picked);
+    if (on) next.add(id);
+    else next.delete(id);
+    setPicked(next);
+  };
 
   if (runs.length === 0) {
     const empty: Record<FilterId, string> = {
@@ -189,9 +195,16 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
     <div>
       {selectable && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rule px-4 py-2">
-          <p className="text-sm text-ink-2">
+          <label className="flex items-center gap-2 text-sm text-ink-2">
+            <input
+              type="checkbox"
+              className="h-4 w-4 md:hidden"
+              aria-label="Select all cleared invoices"
+              checked={selected.length === runs.length}
+              onChange={(e) => setPicked(e.target.checked ? new Set(runs.map((r) => r.run_id)) : new Set())}
+            />
             {selected.length ? `${selected.length} selected` : "Select cleared invoices to approve them together"}
-          </p>
+          </label>
           <button
             type="button"
             disabled={!selected.length}
@@ -207,7 +220,48 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
           {msg.text}
         </p>
       )}
-      <div className="overflow-x-auto">
+      {/* Phones: one card per invoice instead of the wide table. */}
+      <ul className="divide-y divide-rule md:hidden">
+        {runs.map((r) => (
+          <li key={r.run_id} className="flex gap-3 px-4 py-3">
+            {selectable && (
+              <input
+                type="checkbox"
+                className="mt-1.5 h-4 w-4 shrink-0"
+                aria-label={`Select ${r.vendor ?? r.ref}`}
+                checked={picked.has(r.run_id)}
+                onChange={(e) => toggle(r.run_id, e.target.checked)}
+              />
+            )}
+            <div className="min-w-0 flex-1 space-y-1">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Link href={`/runs/${r.run_id}`} className="break-words font-semibold text-ink hover:text-carbon-deep hover:underline">
+                    {r.vendor ?? r.filename ?? "Unread document"}
+                  </Link>
+                  <VendorNote r={r} />
+                </div>
+                <span className="num shrink-0 font-semibold">{r.total ?? <span className="font-normal text-ink-3">not read</span>}</span>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-ink-2">
+                <span>
+                  {r.invoice_number ? <span className="num">{r.invoice_number}</span> : <span className="text-ink-3">no number read</span>}
+                  {r.invoice_date && <span className="text-ink-3">, {formatDate(r.invoice_date)}</span>}
+                </span>
+                <StateChip tone={r.tone} label={r.state_label} exported={r.exported} />
+              </div>
+              <p className="text-sm text-ink-2">
+                <Why r={r} />
+                {r.export_blocked && <span className="block text-xs text-bad-fg">Export blocked</span>}
+              </p>
+              <p className="truncate text-xs text-ink-3">
+                {formatTime(r.created_at)} <span className="num">{r.ref}</span> · {r.source === "email" ? `Email, ${r.received_from}` : `Upload, ${r.received_from} (demo identity)`}
+              </p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full min-w-[46rem] text-left text-sm">
           <thead className="border-b border-rule text-ink-2">
             <tr>
@@ -237,12 +291,7 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
                       type="checkbox"
                       aria-label={`Select ${r.vendor ?? r.ref}`}
                       checked={picked.has(r.run_id)}
-                      onChange={(e) => {
-                        const next = new Set(picked);
-                        if (e.target.checked) next.add(r.run_id);
-                        else next.delete(r.run_id);
-                        setPicked(next);
-                      }}
+                      onChange={(e) => toggle(r.run_id, e.target.checked)}
                     />
                   </td>
                 )}
@@ -250,7 +299,7 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
                   <Link href={`/runs/${r.run_id}`} className="font-semibold text-ink hover:text-carbon-deep hover:underline">
                     {r.vendor ?? r.filename ?? "Unread document"}
                   </Link>
-                  {r.vendor && !r.vendor_known && <span className="ml-2 text-xs text-hold-fg">not in vendor master</span>}
+                  <VendorNote r={r} />
                   <div className="whitespace-nowrap text-ink-2">
                     {r.invoice_number ? <span className="num">{r.invoice_number}</span> : <span className="text-ink-3">no number read</span>}
                     {r.invoice_date && <span className="text-ink-3">, {formatDate(r.invoice_date)}</span>}
@@ -270,18 +319,7 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
                   {r.export_blocked && <div className="mt-1 text-xs text-bad-fg">Export blocked</div>}
                 </td>
                 <td className="px-4 py-3 align-top text-ink-2">
-                  {r.state === "PROCESSING" || r.state === "RECEIVED" ? (
-                    <span className="text-carbon-deep">Reading the document</span>
-                  ) : r.state === "SUPERSEDED" ? (
-                    <span>Replaced by the vendor&apos;s corrected invoice</span>
-                  ) : r.primary ? (
-                    <>
-                      {r.primary.title}
-                      {r.blocking_count > 1 && <span className="text-ink-3"> and {r.blocking_count - 1} more</span>}
-                    </>
-                  ) : r.due_date ? (
-                    <span>Due (per terms) {formatDate(r.due_date)}</span>
-                  ) : null}
+                  <Why r={r} />
                 </td>
               </tr>
             ))}
@@ -290,6 +328,30 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
       </div>
     </div>
   );
+}
+
+/** "Not in vendor master" only when the vendor check ran; a skipped document was never checked. */
+function VendorNote({ r }: { r: RunSummary }) {
+  if (!r.vendor || r.vendor_known) return null;
+  return r.vendor_checked
+    ? <span className="ml-2 text-xs text-hold-fg">not in vendor master</span>
+    : <span className="ml-2 text-xs text-ink-3">vendor not checked</span>;
+}
+
+/** The one-line reason shown in the list: what the invoice needs, or why it is where it is. */
+function Why({ r }: { r: RunSummary }) {
+  if (r.state === "PROCESSING" || r.state === "RECEIVED") return <span className="text-carbon-deep">Reading the document</span>;
+  if (r.state === "SUPERSEDED") return <span>Replaced by the vendor&apos;s corrected invoice</span>;
+  if (r.primary) {
+    return (
+      <>
+        {r.primary.title}
+        {r.blocking_count > 1 && <span className="text-ink-3"> and {r.blocking_count - 1} more</span>}
+      </>
+    );
+  }
+  if (r.due_date) return <span>Due (per terms) {formatDate(r.due_date)}</span>;
+  return null;
 }
 
 function PaymentList({ listing, onChanged }: { listing: Listing | null; onChanged: () => void }) {

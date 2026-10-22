@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import { addDays } from "../dates";
 import { exceedsCap, paiseToRupees } from "../money";
 import type { ReferenceData } from "../engine/types";
 import { markCorrectionSent, nextToken } from "./actions";
@@ -78,8 +79,17 @@ function chainHasOtherPayable(tx: StoreState, run: RunRecord): RunRecord | undef
   return [...tx.runs.values()].find((r) => r.run_id !== run.run_id && r.chain_key === run.chain_key && PAYABLE.has(r.state));
 }
 
-function recordApproval(tx: StoreState, run: RunRecord, a: Omit<Approval, "run_id">) {
+/**
+ * Records an approval. An invoice approved by a person (override, link confirmation, replacement) never went through
+ * the code's CLEARED path, so its due date (invoice date + the vendor's payment terms) is set here: finance needs it
+ * on the payment list. Unknown vendor or no invoice date: left empty.
+ */
+function recordApproval(tx: StoreState, run: RunRecord, a: Omit<Approval, "run_id">, ref: ReferenceData) {
   tx.approvals.push({ run_id: run.run_id, ...a });
+  if (!run.due_date && run.invoice_date && run.vendor_id) {
+    const terms = ref.vendors.find((v) => v.vendor_id === run.vendor_id)?.payment_terms_days;
+    if (terms != null) run.due_date = addDays(run.invoice_date, terms);
+  }
 }
 
 /** C2/C3 against what other CLEARED and APPROVED runs already consume (spec C4: override approvals re-run C2/C3). */
@@ -126,7 +136,7 @@ export function approve(deps: Deps, runIds: string[], ctx: ActionCtx & { expecte
       const other = chainHasOtherPayable(tx, run);
       if (other) throw new Refusal("INVALID_TRANSITION_BLOCKED", `CHAIN_INVARIANT: ${other.ref} is already ${other.state} for this invoice number`);
       transition(tx, run, 6, "APPROVED", { actor: ctx.actor, at, details: { mode: batchId ? "batch" : "individual", batch_id: batchId } });
-      recordApproval(tx, run, { approver_display_name: ctx.actor, approved_at: at, mode: batchId ? "batch" : "individual", batch_id: batchId, note: null });
+      recordApproval(tx, run, { approver_display_name: ctx.actor, approved_at: at, mode: batchId ? "batch" : "individual", batch_id: batchId, note: null }, deps.reference);
       return run;
     });
   });
@@ -148,7 +158,7 @@ export function overrideApprove(deps: Deps, runId: string, ctx: ActionCtx & { co
     const at = deps.now();
     const row = run.state === "AWAITING_VENDOR" ? 14 : 9;
     transition(tx, run, row, "APPROVED", { actor: ctx.actor, at, note: ctx.note, details: { overridden: run.blocking_codes, c2c3: problems, confirmed: Boolean(ctx.confirmFailingChecks) } });
-    recordApproval(tx, run, { approver_display_name: ctx.actor, approved_at: at, mode: "override", batch_id: null, note: ctx.note ?? null });
+    recordApproval(tx, run, { approver_display_name: ctx.actor, approved_at: at, mode: "override", batch_id: null, note: ctx.note ?? null }, deps.reference);
     return run;
   });
 }
@@ -264,7 +274,7 @@ export function confirmCorrectionLink(deps: Deps, candidateId: string, ctx: Acti
       throw new Refusal("NEEDS_CONFIRMATION", "Approving this would exceed the PO; confirm again to approve anyway", { problems });
     }
     transition(tx, cand, 9, "APPROVED", { actor: ctx.actor, at, note: ctx.note, details: { mode: "link-confirmation", supersedes: cand.supersedes_run_ids, c2c3: problems, confirmed: Boolean(ctx.confirmFailingChecks) } });
-    recordApproval(tx, cand, { approver_display_name: ctx.actor, approved_at: at, mode: "link-confirmation", batch_id: null, note: ctx.note ?? null });
+    recordApproval(tx, cand, { approver_display_name: ctx.actor, approved_at: at, mode: "link-confirmation", batch_id: null, note: ctx.note ?? null }, deps.reference);
     return cand;
   });
 }
@@ -293,7 +303,7 @@ export function replaceApproved(deps: Deps, candidateId: string, ctx: ActionCtx 
       throw new Refusal("NEEDS_CONFIRMATION", "Approving this would exceed the PO; confirm again to approve anyway", { problems });
     }
     transition(tx, cand, 9, "APPROVED", { actor: ctx.actor, at, note: ctx.note, details: { mode: "replacement", replaces: original.run_id, c2c3: problems, confirmed: Boolean(ctx.confirmFailingChecks) } });
-    recordApproval(tx, cand, { approver_display_name: ctx.actor, approved_at: at, mode: "replacement", batch_id: null, note: ctx.note ?? null });
+    recordApproval(tx, cand, { approver_display_name: ctx.actor, approved_at: at, mode: "replacement", batch_id: null, note: ctx.note ?? null }, deps.reference);
     return cand;
   });
 }

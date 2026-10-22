@@ -27,10 +27,14 @@ export interface RunSummary {
   received_from: string | null;
   vendor: string | null;
   vendor_known: boolean;
+  /** False when the vendor check did not run (document skipped, or not read yet): "not found" would be untrue. */
+  vendor_checked: boolean;
   invoice_number: string | null;
   invoice_date: string | null;
   total: string | null;
   po_number: string | null;
+  /** False when the purchase-order check did not run, so "none matched" would be untrue. */
+  po_checked: boolean;
   due_date: string | null;
   primary: CodeView | null;
   blocking_count: number;
@@ -50,6 +54,14 @@ export interface FindingView extends CodeView {
   blocking: boolean;
 }
 
+/** A stage note in plain words. `rule` is the spec rule it comes from (K1, V2...), shown small for auditors. */
+export interface NoteView {
+  rule: string | null;
+  text: string;
+  /** Set on reviewer actions; the browser formats it in the viewer's time zone. */
+  at?: string;
+}
+
 export interface StageView {
   n: number;
   id: string;
@@ -57,8 +69,10 @@ export interface StageView {
   /** Who did the work: code, an AI model (named), or a person. */
   by: string;
   by_ai: boolean;
-  status: StageStatus | "running" | "pending" | "failed";
-  notes: string[];
+  status: StageStatus | "running" | "pending" | "failed" | "awaiting_review" | "reviewed" | "not_needed";
+  /** Overrides the default status wording (the reviewer step shows the run's state). */
+  status_text: string | null;
+  notes: NoteView[];
   findings: FindingView[];
 }
 
@@ -98,6 +112,10 @@ const codeView = (code: ReasonCode): CodeView => ({
 
 const fmtRupees = (p: bigint | null) => (p == null ? null : formatInr(paiseToRupees(p)));
 
+/** True when the engine actually ran this stage (not skipped because of an earlier result). */
+const evaluated = (run: RunRecord, stage: string) =>
+  run.engine?.stages.some((s) => s.stage === stage && s.status !== "not_evaluated") ?? false;
+
 export function summarize(run: RunRecord, ref: ReferenceData): RunSummary {
   const vendor = run.vendor_id ? ref.vendors.find((v) => v.vendor_id === run.vendor_id) : undefined;
   const primary = run.primary_reason ? codeView(run.primary_reason) : null;
@@ -105,9 +123,10 @@ export function summarize(run: RunRecord, ref: ReferenceData): RunSummary {
     run_id: run.run_id, ref: run.ref, state: run.state, state_label: STATE_TEXT[run.state].label, tone: STATE_TEXT[run.state].tone,
     source: run.source, received_from: run.source === "email" ? run.sender_email : run.uploader_display_name,
     vendor: vendor?.legal_name ?? run.extraction?.vendor_name ?? null, vendor_known: Boolean(vendor),
+    vendor_checked: Boolean(vendor) || evaluated(run, "vendor"),
     invoice_number: run.extraction?.invoice_number ?? null, invoice_date: run.invoice_date ?? run.extraction?.invoice_date ?? null,
     total: run.total_paise != null ? fmtRupees(run.total_paise) : formatInr(run.extraction?.total),
-    po_number: run.po_number, due_date: run.due_date,
+    po_number: run.po_number, po_checked: Boolean(run.po_number) || evaluated(run, "po"), due_date: run.due_date,
     primary: run.state === "CLEARED" || run.state === "APPROVED" || run.state === "SUPERSEDED" ? null : primary,
     blocking_count: run.blocking_codes.length, exported: run.exported, export_id: run.export_id, export_blocked: run.export_blocked,
     version: run.version, created_at: run.created_at, updated_at: run.updated_at, filename: run.filename,
@@ -133,6 +152,34 @@ const ENGINE_TITLES: Record<string, string> = {
   decide: "Decision",
 };
 
+const NOT_CHECKED_WHY: Record<string, string> = {
+  "skipped at G1": "this document is not an invoice",
+  "vendor unknown": "the vendor is not in the vendor master",
+  "rejected as a duplicate": "the invoice was rejected as a duplicate",
+  "no PO": "no purchase order was matched",
+};
+
+/**
+ * Engine notes are written for the audit trail ("K1: ...", "not evaluated: skipped at G1", "Outcome: ON_HOLD").
+ * The screen shows the same facts in plain words, with the rule id kept separately (shown small).
+ */
+export function plainNote(note: string): NoteView {
+  const m = /^([A-Z]\d+(?:[-/][A-Z]?\d+)*)( not evaluated)?:\s*(.*)$/s.exec(note);
+  const rule = m ? m[1] : null;
+  let text = m ? (m[2] ? `not evaluated: ${m[3]}` : m[3]) : note;
+  const skipped = /^not evaluated:\s*(.*)$/s.exec(text);
+  if (skipped) text = `Not checked: ${NOT_CHECKED_WHY[skipped[1]] ?? skipped[1]}`;
+  const outcome = /^Outcome: ([A-Z_]+)$/.exec(text);
+  if (outcome) text = `Decision: ${STATE_TEXT[outcome[1] as RunRecord["state"]]?.label ?? outcome[1]}`;
+  const due = /^Due \(per terms\): (\d{4}-\d{2}-\d{2}) \((\d+) days\)$/.exec(text);
+  if (due) text = `Due (per terms): ${formatDate(due[1])}, ${due[2]} days after the invoice date`;
+  const ai = /^AI doc_type: ([^;]*); title "([^"]*)"; number label "([^"]*)"$/.exec(text);
+  if (ai) text = `The AI read it as ${ai[1] === "invoice" ? "an invoice" : `a ${ai[1].replace(/_/g, " ")}`}${ai[2] ? `, titled "${ai[2]}"` : ""}${ai[3] ? `, number labelled "${ai[3]}"` : ""}`;
+  return { rule, text: text.charAt(0).toUpperCase() + text.slice(1) };
+}
+
+const plain = (text: string): NoteView => ({ rule: null, text });
+
 /** Engine notes name other runs by id; people know them by reference. */
 function refsFor(runs: Map<string, RunRecord>) {
   const pairs = [...runs.values()].map((r) => [r.run_id, r.ref] as const);
@@ -141,31 +188,31 @@ function refsFor(runs: Map<string, RunRecord>) {
 
 function stagesOf(run: RunRecord, named: (t: string) => string = (t) => t): StageView[] {
   const intake: StageView = {
-    n: 0, id: "intake", title: run.source === "email" ? "Received by email" : "Uploaded", by: "Code", by_ai: false, status: "passed",
-    notes: run.source === "email"
+    n: 0, id: "intake", title: run.source === "email" ? "Received by email" : "Uploaded", by: "Code", by_ai: false, status: "passed", status_text: null,
+    notes: (run.source === "email"
       ? [`From ${run.sender_email ?? "unknown sender"}`, ...(run.subject ? [`Subject "${run.subject}"`] : []), ...(run.reply_token ? [`Reply token ${run.reply_token}`] : [])]
-      : [`Uploaded by ${run.uploader_display_name ?? "unknown"} (demo identity)`],
+      : [`Uploaded by ${run.uploader_display_name ?? "unknown"} (demo identity)`]).map(plain),
     findings: [],
   };
   if (run.state === "SKIPPED" && !run.extraction && run.primary_reason) {
     intake.status = "skipped";
-    intake.notes.push(run.failure ?? "");
+    if (run.failure) intake.notes.push(plain(run.failure));
     intake.findings = [{ ...codeView(run.primary_reason), message: run.failure ?? "", evidence: [], line_no: null, blocking: true }];
     return [intake];
   }
   const label = run.extracted_by?.extractor ?? null;
   const ai = Boolean(label && /gemini/i.test(label));
   const read: StageView = {
-    n: 1, id: "read", title: "Read the document", by: label ?? "Extractor", by_ai: ai,
+    n: 1, id: "read", title: "Read the document", by: label ?? "Extractor", by_ai: ai, status_text: null,
     status: run.state === "RECEIVED" ? "pending" : run.state === "PROCESSING" && !run.extraction ? "running" : run.extraction ? "passed" : "failed",
     notes: [], findings: [],
   };
   if (run.extracted_by) {
-    read.notes.push(run.extracted_by.cached ? "Answer reused from the cache (same file, prompt and model)" : `${run.extracted_by.attempts} provider call${run.extracted_by.attempts === 1 ? "" : "s"}`);
-    for (const r of run.extracted_by.retries ?? []) read.notes.push(`Retried: ${r}`);
+    read.notes.push(plain(run.extracted_by.cached ? "Answer reused from the cache (same file, prompt and model)" : `${run.extracted_by.attempts} provider call${run.extracted_by.attempts === 1 ? "" : "s"}`));
+    for (const r of run.extracted_by.retries ?? []) read.notes.push(plain(`Retried: ${r}`));
   }
-  if (run.extraction) read.notes.push(`Read as ${run.extraction.doc_type}, titled "${run.extraction.document_title ?? "no title"}"`);
-  if (run.failure && !run.extraction) read.notes.push(run.failure);
+  if (run.extraction) read.notes.push(plain(`Read as ${run.extraction.doc_type.replace(/_/g, " ")}, titled "${run.extraction.document_title ?? "no title"}"`));
+  if (run.failure && !run.extraction) read.notes.push(plain(run.failure));
   if (run.blocking_codes.includes("EXTRACTION_FAILED") && !run.engine) {
     read.status = "held";
     read.findings = [{ ...codeView("EXTRACTION_FAILED"), message: "The model's answer failed validation twice", evidence: [], line_no: null, blocking: true }];
@@ -178,7 +225,7 @@ function stagesOf(run: RunRecord, named: (t: string) => string = (t) => t): Stag
     out.push({
       n: ENGINE_STAGE_NO[st.stage], id: st.stage, title: ENGINE_TITLES[st.stage] ?? st.label,
       by: usedAi ? "Code (checked an AI line proposal)" : "Code", by_ai: false,
-      status: st.status, notes: st.notes.map(named),
+      status: st.status, status_text: null, notes: st.notes.map((n) => plainNote(named(n))),
       findings: st.findings.map((f) => {
         const v = findingView(f, blockingSet.has(`${f.code}|${f.stage}|${f.line_no ?? ""}|${f.message}`));
         return { ...v, message: named(v.message), evidence: v.evidence.map((e) => ({ ...e, value: named(e.value) })) };
@@ -186,6 +233,69 @@ function stagesOf(run: RunRecord, named: (t: string) => string = (t) => t): Stag
     });
   }
   return out;
+}
+
+/** What a reviewer's state change did, in words. Keyed by the section 11 row recorded on the event. */
+function reviewerAction(e: AuditEvent): string {
+  switch (e.to_state) {
+    case "APPROVED":
+      return e.transition === 9 || e.transition === 14 ? "Approved with an exception" : "Approved for the payment list";
+    case "ON_HOLD":
+      return e.transition === 13 ? "Stopped waiting for the vendor; back on hold" : "Put on hold";
+    case "REJECTED":
+      return "Rejected";
+    case "AWAITING_VENDOR":
+      return "Requested a correction from the vendor";
+    case "PROCESSING":
+      return e.transition === 5 ? "Processed it as an invoice" : "Retried reading";
+    case "SUPERSEDED":
+      return e.transition === 17 ? "Replaced it with the newer invoice" : "Confirmed the vendor's correction replaces it";
+    default:
+      return `${STATE_TEXT[e.from_state!]?.label ?? e.from_state} to ${STATE_TEXT[e.to_state!]?.label ?? e.to_state}`;
+  }
+}
+
+const WAITING_NOTE: Partial<Record<RunRecord["state"], string>> = {
+  CLEARED: "Nothing goes on the payment list until a reviewer approves it.",
+  ON_HOLD: "A reviewer decides: request a correction, approve with an exception, or reject.",
+  FAILED: "A reviewer can retry reading it.",
+};
+
+const NOTHING_TO_DO: Partial<Record<RunRecord["state"], string>> = {
+  SKIPPED: "Not an invoice, so there is nothing to approve.",
+  REJECTED: "Rejected by the checks, so there is nothing to approve.",
+  SUPERSEDED: "Replaced by the vendor's corrected invoice, which is reviewed instead.",
+  FAILED: "The file could not be fetched; the vendor has to send it again.",
+};
+
+/**
+ * The last step of the routing slip: what a person did after the checks. Built from the audit log (human state
+ * changes and exports), so it shows only what was recorded.
+ */
+export function reviewStage(run: RunRecord, events: AuditEvent[], actions: ActionOption[]): StageView | null {
+  if (run.state === "RECEIVED" || run.state === "PROCESSING") return null;
+  const human = events.filter((e) => e.actor !== "system" && ((e.type === "STATE_CHANGED" && e.to_state) || e.type === "EXPORTED"));
+  const notes: NoteView[] = human.map((e) => {
+    const what = e.type === "EXPORTED" ? `Exported to payment list ${String((e.details ?? {}).export_id ?? "")}`.trim() : reviewerAction(e);
+    return { rule: null, text: `${what} by ${e.actor} (demo identity)${e.note ? `. Note: ${e.note}` : ""}`, at: e.at };
+  });
+  const waiting = actions.length > 0 && (run.state === "CLEARED" || run.state === "ON_HOLD" || run.state === "FAILED");
+  let status: StageView["status"];
+  let status_text: string | null;
+  if (waiting) {
+    status = "awaiting_review";
+    status_text = "Waiting for a reviewer";
+    notes.push(plain(WAITING_NOTE[run.state] ?? ""));
+  } else if (human.length > 0) {
+    status = "reviewed";
+    status_text = run.exported ? "Approved and exported" : STATE_TEXT[run.state].label;
+  } else {
+    status = "not_needed";
+    status_text = "No action needed";
+    notes.push(plain(NOTHING_TO_DO[run.state] ?? "Nothing for a reviewer to do."));
+    if (actions.some((a) => a.action === "process_as_invoice")) notes.push(plain("If it is an invoice after all, a reviewer can process it as one."));
+  }
+  return { n: 10, id: "review", title: "Reviewer decision", by: "Person (demo identity)", by_ai: false, status, status_text, notes, findings: [] };
 }
 
 export function detail(run: RunRecord, state: Pick<StoreState, "runs" | "documents" | "tokens">, logs: Logs, ref: ReferenceData): RunDetail {
@@ -200,15 +310,17 @@ export function detail(run: RunRecord, state: Pick<StoreState, "runs" | "documen
   }
   relatedIds.delete(run.run_id);
   const token = [...state.tokens].find(([, id]) => id === run.run_id)?.[0] ?? null;
+  const actions = availableActions(run, state);
+  const review = reviewStage(run, logs.events, actions);
   return {
     ...summarize(run, ref),
     failure: run.failure, sender_email: run.sender_email, uploader: run.uploader_display_name, subject: run.subject, reply_token: run.reply_token,
     extracted_by: run.extracted_by, extraction: run.extraction,
     document: doc ? { run_id: doc.run_id, filename: doc.filename, content_type: doc.content_type, size_bytes: doc.size_bytes, sha256: doc.sha256, has_text_layer: doc.has_text_layer, body_text: doc.body_text, text_chars: doc.text_layer.length } : null,
-    stages: stagesOf(run, refsFor(state.runs as Map<string, RunRecord>)),
+    stages: [...stagesOf(run, refsFor(state.runs as Map<string, RunRecord>)), ...(review ? [review] : [])],
     blocking: run.blocking_codes.map(codeView),
     info: run.info_codes.map(codeView),
-    actions: availableActions(run, state),
+    actions,
     approvals: logs.approvals, corrections: logs.corrections, exports: logs.exports, events: logs.events,
     related: [...relatedIds].map((id) => state.runs.get(id)).filter((r): r is RunRecord => Boolean(r)).map((r) => summarize(r, ref)),
     token_active: run.state === "AWAITING_VENDOR" || run.state === "ON_HOLD" ? token : null,
