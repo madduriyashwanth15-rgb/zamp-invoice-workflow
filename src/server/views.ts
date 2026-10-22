@@ -155,6 +155,7 @@ function stagesOf(run: RunRecord, named: (t: string) => string = (t) => t): Stag
   };
   if (run.extracted_by) {
     read.notes.push(run.extracted_by.cached ? "Answer reused from the cache (same file, prompt and model)" : `${run.extracted_by.attempts} provider call${run.extracted_by.attempts === 1 ? "" : "s"}`);
+    for (const r of run.extracted_by.retries ?? []) read.notes.push(`Retried: ${r}`);
   }
   if (run.extraction) read.notes.push(`Read as ${run.extraction.doc_type}, titled "${run.extraction.document_title ?? "no title"}"`);
   if (run.failure && !run.extraction) read.notes.push(run.failure);

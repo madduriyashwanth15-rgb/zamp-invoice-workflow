@@ -5,11 +5,13 @@ import { parseExtraction, passRule, runGolden, tests, type GoldenEntry } from ".
 
 // Oracle sensitivity (validation_report.txt sections 6-8), re-run through the real pipeline: each mutation must
 // change the result the way the matrix footnotes and the S7 note *** say. Proves the golden run can fail.
+// Each test is an independent golden run on its own fresh stores, so they run concurrently (13 golden runs; on
+// Postgres over the network that is minutes when run one after another).
 
 const get = (res: GoldenEntry[], id: string) => res.find((e) => e.test.test_id === id)!;
 const codes = (e: GoldenEntry) => [...new Set(e.run.blocking_codes)].sort();
 
-describe("matrix footnotes and linking guards", () => {
+describe.concurrent("matrix footnotes and linking guards", () => {
   it("without the M2 proposer (footnote *), S14 -> ON_HOLD LINE_UNMAPPED", async () => {
     const s14 = get(await runGolden({ proposer: null }), "S14");
     expect(s14.run.state).toBe("ON_HOLD");
@@ -36,7 +38,7 @@ describe("matrix footnotes and linking guards", () => {
   });
 });
 
-describe("lump-sum rule regression (spec M5 v1.2.2+)", () => {
+describe.concurrent("lump-sum rule regression (spec M5 v1.2.2+)", () => {
   it("an ordinary line citing its PO number maps normally: S6a still CLEARED and S6b unchanged", async () => {
     const res = await runGolden({ mutate: (e, id) => { if (id === "S6a") e.lines[0].description = "LPG cylinder 19 kg commercial (refill) as per PO-1003"; return e; } });
     expect(passRule(get(res, "S6a")).problems).toEqual([]);
@@ -49,7 +51,7 @@ describe("lump-sum rule regression (spec M5 v1.2.2+)", () => {
   });
 });
 
-describe("S7: misreads fail the test, they are never accepted quietly (matrix note ***)", () => {
+describe.concurrent("S7: misreads fail the test, they are never accepted quietly (matrix note ***)", () => {
   const s7 = tests.get("S7")!;
   const fields = s7.critical_fields as string[];
   const expected = parseExtraction(structuredClone(s7.expected_extraction));

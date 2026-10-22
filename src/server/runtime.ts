@@ -59,6 +59,9 @@ function build(): Runtime {
   let pgStore: PgRunStore | null = null;
   if (dbUrl) {
     pool = new Pool({ connectionString: dbUrl, max: 3, idleTimeoutMillis: 10_000, connectionTimeoutMillis: 10_000 });
+    // An idle connection dropped by the server (Neon suspends after 5 idle minutes) is reported here; without a
+    // listener node-postgres would crash the process. The pool replaces the connection on the next query.
+    pool.on("error", (e) => console.error(`postgres: idle connection closed (${e.message})`));
     pgStore = new PgRunStore(pool);
     store = pgStore;
   } else {

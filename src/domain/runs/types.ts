@@ -26,7 +26,7 @@ export interface RunRecord {
   sender_authenticated?: boolean | null;
   extraction: Extraction | null;
   /** Which extractor and prompt version read the document, after how many provider calls (0 = cache hit). */
-  extracted_by: { extractor: string; attempts: number; cached: boolean } | null;
+  extracted_by: { extractor: string; attempts: number; cached: boolean; retries?: string[] } | null;
   engine: EngineResult | null;
   vendor_id: string | null;
   chain_key: string | null;

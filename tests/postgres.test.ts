@@ -29,7 +29,7 @@ class GatedExtractor implements Extractor {
   }
 }
 
-describe.skipIf(!enabled)("Postgres store", () => {
+describe.skipIf(!enabled)("Postgres store", { timeout: 300_000 }, () => { // network round trips to Neon: see vitest.pg.config.mts
   it("golden run on Postgres equals the in-memory golden run, record for record", async () => {
     const mem = await runGolden({ storeFactory: () => new MemoryRunStore() });
     const pg = await runGolden({ storeFactory: () => freshPgStore() });
@@ -123,5 +123,26 @@ describe.skipIf(!enabled)("Postgres store", () => {
     const schema = (store as unknown as { schema: string }).schema;
     await expect(testPool().query(`UPDATE "${schema}".audit_events SET actor = 'someone else'`)).rejects.toThrow(/append-only/);
     await expect(testPool().query(`DELETE FROM "${schema}".audit_events`)).rejects.toThrow(/append-only/);
+  });
+
+  it("batched writes: a changed document and late file bytes are written back; several events keep their order", async () => {
+    const store = freshPgStore();
+    const deps: PipelineDeps = { ...makeDeps(), store };
+    const run = await ingest(deps, {
+      source: "upload", sender_email: null, uploader_display_name: "Divya (AP)", provider_email_id: null, attachment_id: null,
+      filename: "z.pdf", content_type: "application/pdf", bytes: new Uint8Array([9]), subject: null, reply_token: null, text_layer: "", has_text_layer: false,
+    });
+    const before = (await store.logs(run.run_id)).events.length;
+    await store.transaction((tx) => {
+      const d = tx.documents.get(run.run_id)!;
+      tx.documents.set(run.run_id, { ...d, body_text: "it's a test: quotes ' and \\ backslash" });
+      tx.newFiles.set(run.run_id, new Uint8Array([4, 5, 6]));
+      for (const actor of ["first", "second", "third"]) tx.events.push({ seq: 0, run_id: run.run_id, type: "NOTE", actor, at: "2026-10-22T00:00:00Z" });
+    });
+    expect(await store.read((s) => s.documents.get(run.run_id)!.body_text)).toBe("it's a test: quotes ' and \\ backslash");
+    expect([...(await store.documentBytes(run.run_id))!]).toEqual([4, 5, 6]);
+    const events = (await store.logs(run.run_id)).events;
+    expect(events.slice(before).map((e) => e.actor)).toEqual(["first", "second", "third"]);
+    expect(events.map((e) => e.seq)).toEqual([...events.map((e) => e.seq)].sort((a, b) => a - b));
   });
 });

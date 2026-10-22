@@ -7,7 +7,7 @@ import { oracle, passRule, runGolden, type GoldenEntry } from "./support/harness
 let results: GoldenEntry[] = [];
 beforeAll(async () => {
   results = await runGolden();
-}, 60_000);
+}); // time limit from the config (longer for the Postgres run, which crosses the network)
 
 describe("golden run: pass rule against answer_key.json", () => {
   it("covers exactly the 18 tests in matrix order", () => {

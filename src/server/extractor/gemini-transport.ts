@@ -27,6 +27,13 @@ export interface GeminiTransport {
 }
 
 const RETRYABLE = new Set([408, 429, 500, 502, 503, 504]);
+const TIMEOUT_HINT = "no answer before the time limit";
+
+/** A timeout (our AbortController) reads as such, not as "This operation was aborted". */
+function describeFetchError(e: unknown, timeout: string): string {
+  if (e instanceof Error && (e.name === "AbortError" || e.name === "TimeoutError")) return `timeout: ${timeout}`;
+  return e instanceof Error ? e.message : String(e);
+}
 
 export class FetchGeminiTransport implements GeminiTransport {
   constructor(
@@ -57,7 +64,7 @@ export class FetchGeminiTransport implements GeminiTransport {
       if (!text) return { ok: false, retryable: true, status: res.status, message: `empty response (finishReason ${parsed.candidates?.[0]?.finishReason ?? "none"})` };
       return { ok: true, text };
     } catch (e) {
-      return { ok: false, retryable: true, status: null, message: e instanceof Error ? e.message : String(e) };
+      return { ok: false, retryable: true, status: null, message: describeFetchError(e, TIMEOUT_HINT) };
     } finally {
       clearTimeout(timer);
     }
@@ -111,16 +118,18 @@ export class InteractionsGeminiTransport implements GeminiTransport {
       if (!text) return { ok: false, retryable: true, status: res.status, message: `no text output (status ${parsed.status ?? "unknown"})` };
       return { ok: true, text };
     } catch (e) {
-      return { ok: false, retryable: true, status: null, message: e instanceof Error ? e.message : String(e) };
+      return { ok: false, retryable: true, status: null, message: describeFetchError(e, TIMEOUT_HINT) };
     } finally {
       clearTimeout(timer);
     }
   }
 }
 
-/** Picks the transport from the environment (GEMINI_API, GEMINI_THINKING_LEVEL). */
+/** Picks the transport from the environment (GEMINI_API, GEMINI_THINKING_LEVEL, GEMINI_TIMEOUT_MS). */
 export function transportFromEnv(apiKey: string, env: Record<string, string | undefined> = process.env): GeminiTransport {
-  if ((env.GEMINI_API ?? "interactions") === "generate_content") return new FetchGeminiTransport(apiKey);
+  const t = Number(env.GEMINI_TIMEOUT_MS);
+  const timeoutMs = Number.isFinite(t) && t >= 5_000 && t <= 90_000 ? t : 60_000; // capped: see the time budget in gemini-extractor.ts
+  if ((env.GEMINI_API ?? "interactions") === "generate_content") return new FetchGeminiTransport(apiKey, undefined, timeoutMs);
   const level = env.GEMINI_THINKING_LEVEL;
-  return new InteractionsGeminiTransport(apiKey, { thinkingLevel: level === undefined ? "low" : level === "" || level === "default" ? null : level });
+  return new InteractionsGeminiTransport(apiKey, { thinkingLevel: level === undefined ? "low" : level === "" || level === "default" ? null : level, timeoutMs });
 }

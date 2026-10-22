@@ -17,10 +17,11 @@ export interface ExtractorInput {
   sha256: string | null;
 }
 
+/** `retries` says why each provider call before the last one did not count (for the run's record). */
 export type ExtractionAttempt =
-  | { status: "ok"; extraction: Extraction; attempts: number; label: string; cached?: boolean }
-  | { status: "schema_invalid"; errors: string[]; attempts: number; label: string }
-  | { status: "transport_error"; error: string; attempts: number; label: string };
+  | { status: "ok"; extraction: Extraction; attempts: number; label: string; cached?: boolean; retries?: string[] }
+  | { status: "schema_invalid"; errors: string[]; attempts: number; label: string; retries?: string[] }
+  | { status: "transport_error"; error: string; attempts: number; label: string; retries?: string[] };
 
 export interface Extractor {
   readonly label: string;
@@ -192,7 +193,7 @@ export async function processRun(deps: PipelineDeps, runId: string): Promise<Run
       const run = tx.runs.get(runId)!;
       if (run.state !== "PROCESSING") return run; // already failed by the stuck-run sweep; a retry starts again
       run.failure = `PROCESSING_ERROR: ${attempt.error} (${attempt.attempts} attempts)`;
-      run.extracted_by = { extractor: attempt.label, attempts: attempt.attempts, cached: false };
+      run.extracted_by = { extractor: attempt.label, attempts: attempt.attempts, cached: false, retries: attempt.retries ?? [] };
       run.primary_reason = "PROCESSING_ERROR";
       transition(tx, run, 3, "FAILED", { actor: "system", at: deps.now(), code: "PROCESSING_ERROR", details: { attempts: attempt.attempts, extractor: attempt.label, error: attempt.error } });
       return run;
@@ -204,7 +205,7 @@ export async function processRun(deps: PipelineDeps, runId: string): Promise<Run
       if (run.state !== "PROCESSING") return run;
       const at = deps.now();
       run.blocking_codes = ["EXTRACTION_FAILED"];
-      run.extracted_by = { extractor: attempt.label, attempts: attempt.attempts, cached: false };
+      run.extracted_by = { extractor: attempt.label, attempts: attempt.attempts, cached: false, retries: attempt.retries ?? [] };
       run.primary_reason = "EXTRACTION_FAILED";
       run.engine = null;
       transition(tx, run, 2, "ON_HOLD", { actor: "system", at, code: "EXTRACTION_FAILED", details: { errors: attempt.errors, attempts: attempt.attempts, extractor: attempt.label } });
@@ -252,7 +253,7 @@ export async function processRun(deps: PipelineDeps, runId: string): Promise<Run
       if (run.state !== "PROCESSING") return run; // failed by the sweep meanwhile: this late result is discarded
       if (fingerprint(tx, runId, engine) !== fp) return null;
       run.extraction = attempt.extraction;
-      run.extracted_by = { extractor: attempt.label, attempts: attempt.attempts, cached: attempt.cached ?? false };
+      run.extracted_by = { extractor: attempt.label, attempts: attempt.attempts, cached: attempt.cached ?? false, retries: attempt.retries ?? [] };
       applyDecision(tx, run, engine, deps.now());
       return run;
     });

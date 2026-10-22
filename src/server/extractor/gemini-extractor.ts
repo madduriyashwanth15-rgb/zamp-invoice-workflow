@@ -8,6 +8,10 @@ import { EXTRACTION_PROMPT_VERSION, MAPPING_PROMPT_VERSION, extractionPrompt, ma
 
 // One read-and-classify call per document (spec 14): transport errors retried 3 times, schema-invalid answers
 // retried twice with the validation errors fed back, results cached by sha256 + prompt version + model.
+//
+// Time budget: processing runs inside one serverless invocation, and Vercel Hobby stops a function at 300 s.
+// No new call is started once the budget is spent, so a run always ends as decided or FAILED (retryable) inside
+// that limit instead of being cut off mid-way. Worst case: budget + one call's timeout.
 
 export interface ExtractionCache {
   get(key: string): Promise<Extraction | null>;
@@ -33,7 +37,16 @@ export interface GeminiExtractorOptions {
   sleep?: (ms: number) => Promise<void>;
   transportAttempts?: number;
   schemaAttempts?: number;
+  /** Clock for per-call timings and the budget; injectable for tests. */
+  now?: () => number;
+  /** No new provider call is started after this many ms (default EXTRACTION_BUDGET_MS). */
+  budgetMs?: number;
 }
+
+// With the 60 s per-call timeout: extraction ends by about 120 + 60 + backoff = 182 s, one line-mapping proposal by
+// about 45 + 60 = 105 s, so even S14 (read, then one mapping proposal) stays under 300 s in the worst case.
+export const EXTRACTION_BUDGET_MS = 120_000;
+export const MAPPING_BUDGET_MS = 45_000;
 
 const DECIMAL_FIELDS = ["subtotal", "cgst", "sgst", "igst", "tax_total", "total"] as const;
 const LINE_DECIMALS = ["qty", "unit_price", "amount", "gst_rate"] as const;
@@ -67,6 +80,8 @@ export function withTaxTotal(e: Extraction): Extraction {
   return { ...e, tax_total: parts.reduce((s, v) => s.plus(v), new Decimal(0)).toFixed(2) };
 }
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 function toBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64");
 }
@@ -98,17 +113,31 @@ export class GeminiExtractor implements Extractor {
     ];
     let feedback: string[] | null = null;
     let calls = 0;
+    // Why each call before the successful one did not count (kept on the run: timeouts, overload, rejected answers).
+    const retries: string[] = [];
+    const clock = this.o.now ?? (() => Date.now());
+    const begin = clock();
+    const budget = this.o.budgetMs ?? EXTRACTION_BUDGET_MS;
+    const outOfTime = () => {
+      const spent = Math.round((clock() - begin) / 1000);
+      retries.push(`stopped: the ${Math.round(budget / 1000)} s time budget was used up (${spent} s, ${plural(calls, "call")})`);
+      return { status: "transport_error" as const, error: `time budget used up after ${plural(calls, "call")} (${spent} s)`, attempts: calls, label: this.label, retries };
+    };
     for (let s = 1; s <= maxSchema; s++) {
       let text: string | null = null;
       for (let t = 1; t <= maxTransport; t++) {
+        if (calls > 0 && clock() - begin > budget) return outOfTime();
         calls++;
+        const started = clock();
         const res = await this.o.transport.generate({ model: this.o.model, json: true, parts: feedback ? [...base, { text: retryFeedback(feedback) }] : base });
+        const secs = Math.round((clock() - started) / 100) / 10;
         if (res.ok) {
           text = res.text;
           break;
         }
+        retries.push(`call ${calls}: ${res.status ?? "network"} ${res.message.slice(0, 120)} (${secs} s)`);
         if (!res.retryable || t === maxTransport) {
-          return { status: "transport_error", error: `${res.status ?? "network"}: ${res.message}`, attempts: calls, label: this.label };
+          return { status: "transport_error", error: `${res.status ?? "network"}: ${res.message}`, attempts: calls, label: this.label, retries };
         }
         await sleep(500 * 2 ** (t - 1));
       }
@@ -117,17 +146,19 @@ export class GeminiExtractor implements Extractor {
         json = JSON.parse(text!.replace(/^```(?:json)?\s*|\s*```$/g, ""));
       } catch (e) {
         feedback = [`not valid JSON (${e instanceof Error ? e.message : e})`];
+        retries.push(`call ${calls}: answer was ${feedback[0]}`);
         continue;
       }
       const parsed = this.schema.safeParse(coerce(json));
       if (parsed.success) {
         const extraction = withTaxTotal(parsed.data);
         if (key && this.o.cache) await this.o.cache.set(key, extraction);
-        return { status: "ok", extraction, attempts: calls, label: this.label };
+        return { status: "ok", extraction, attempts: calls, label: this.label, retries };
       }
       feedback = parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`);
+      retries.push(`call ${calls}: answer rejected by validation (${feedback.slice(0, 3).join("; ")})`);
     }
-    return { status: "schema_invalid", errors: feedback ?? ["unknown"], attempts: calls, label: this.label };
+    return { status: "schema_invalid", errors: feedback ?? ["unknown"], attempts: calls, label: this.label, retries };
   }
 }
 
@@ -146,7 +177,7 @@ export class ProposerUnavailableError extends Error {}
  */
 export class GeminiMappingProposer implements MappingProposer {
   readonly label: string;
-  constructor(private o: { model: string; transport: GeminiTransport; reference: ReferenceData; sleep?: (ms: number) => Promise<void> }) {
+  constructor(private o: { model: string; transport: GeminiTransport; reference: ReferenceData; sleep?: (ms: number) => Promise<void>; now?: () => number; budgetMs?: number }) {
     this.label = `Gemini ${o.model} (${MAPPING_PROMPT_VERSION})`;
   }
   async propose(req: MappingRequest): Promise<MappingProposal | null> {
@@ -156,7 +187,13 @@ export class GeminiMappingProposer implements MappingProposer {
       catalog: this.o.reference.catalog,
     });
     const sleep = this.o.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+    const clock = this.o.now ?? (() => Date.now());
+    const begin = clock();
+    const budget = this.o.budgetMs ?? MAPPING_BUDGET_MS;
     for (let t = 1; t <= 3; t++) {
+      if (t > 1 && clock() - begin > budget) {
+        throw new ProposerUnavailableError(`line mapping call: the ${Math.round(budget / 1000)} s time budget was used up after ${plural(t - 1, "call")}`);
+      }
       const res = await this.o.transport.generate({ model: this.o.model, json: true, parts: [{ text: prompt }] });
       if (res.ok) {
         try {

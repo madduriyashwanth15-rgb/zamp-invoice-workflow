@@ -50,7 +50,7 @@ describe("GeminiExtractor through the pipeline (MOCK provider)", () => {
     expect(req.parts[0].text).toContain(reference.settings.buyer.gstin);
     expect(req.parts[1].inline_data?.mime_type).toBe("application/pdf");
     expect(Buffer.from(req.parts[1].inline_data!.data, "base64").subarray(0, 5).toString()).toBe("%PDF-");
-    expect(run.extracted_by).toEqual({ extractor: `Gemini gemini-test-model (${EXTRACTION_PROMPT_VERSION})`, attempts: 1, cached: false });
+    expect(run.extracted_by).toEqual({ extractor: `Gemini gemini-test-model (${EXTRACTION_PROMPT_VERSION})`, attempts: 1, cached: false, retries: [] });
     const decided = (await eventsOf(deps, run.run_id)).find((e) => e.type === "DECIDED");
     expect(JSON.stringify(decided?.details)).toContain(EXTRACTION_PROMPT_VERSION);
   });
@@ -104,11 +104,19 @@ describe("GeminiExtractor through the pipeline (MOCK provider)", () => {
     expect((await eventsOf(deps, run.run_id)).some((e) => e.type === "DECIDED")).toBe(false);
   });
 
-  it("429 then success -> one decision, no failure", async () => {
+  it("429 then success -> one decision, no failure; the run records why the first call did not count", async () => {
     const { deps, transport } = withGemini([http(429), ok(s1())]);
     const run = await deliver(deps, "S1", {});
     expect(run.state).toBe("CLEARED");
     expect(transport.requests).toHaveLength(2);
+    expect(run.extracted_by?.retries).toEqual([expect.stringMatching(/^call 1: 429 HTTP 429 \(\d+(\.\d)? s\)$/)]);
+  });
+
+  it("a rejected answer is recorded as a retry reason too", async () => {
+    const { deps } = withGemini([ok({ ...s1(), doc_type: "receipt" }), ok(s1())]);
+    const run = await deliver(deps, "S1", {});
+    expect(run.state).toBe("CLEARED");
+    expect(run.extracted_by?.retries?.[0]).toMatch(/^call 1: answer rejected by validation \(doc_type/);
   });
 
   it("a non-retryable error (400) fails after one call", async () => {
@@ -188,6 +196,58 @@ describe("GeminiMappingProposer (M2, MOCK provider)", () => {
     const gt = (tests.get("S14")!.ai_mapping_ground_truth as { proposed_po_line: number; pack_size_read: number; justification: string }[])[0];
     const again = await retry({ ...deps, proposer: new GeminiMappingProposer({ model: "m", reference, transport: new ScriptedTransport([ok(gt)]) }) }, run.run_id, { actor: "Divya (AP)" });
     expect(again.ok && again.value.state).toBe("CLEARED");
+  });
+});
+
+/** MOCK provider where every call takes `ms` of fake time, so the time budget can be tested without waiting. */
+class SlowTransport implements GeminiTransport {
+  calls = 0;
+  constructor(private clock: { t: number }, private ms: number, private answer: () => GeminiResponse) {}
+  async generate(): Promise<GeminiResponse> {
+    this.calls++;
+    this.clock.t += this.ms;
+    return this.answer();
+  }
+}
+
+describe("time budget (Vercel Hobby stops a function at 300 s)", () => {
+  it("extraction starts no new call after 120 s: slow 503s end FAILED with the reason, not cut off mid-run", async () => {
+    const clock = { t: 0 };
+    const transport = new SlowTransport(clock, 70_000, () => http(503));
+    const extractor = new GeminiExtractor({ model: "m", transport, reference, sleep: noSleep, now: () => clock.t });
+    const deps: PipelineDeps = { ...makeDeps(), extractor };
+    const run = await deliver(deps, "S1", {});
+    expect(transport.calls).toBe(2); // 70 s, then 140 s: past the budget, so no third call
+    expect(run.state).toBe("FAILED");
+    expect(run.failure).toMatch(/time budget used up after 2 calls \(140 s\)/);
+    expect(run.extracted_by?.retries?.at(-1)).toMatch(/120 s time budget was used up/);
+  });
+
+  it("a fast failure inside the budget is still retried", async () => {
+    const clock = { t: 0 };
+    let n = 0;
+    const transport = new SlowTransport(clock, 20_000, () => (++n === 1 ? http(503) : ok(s1())));
+    const extractor = new GeminiExtractor({ model: "m", transport, reference, sleep: noSleep, now: () => clock.t });
+    const run = await deliver({ ...makeDeps(), extractor }, "S1", {});
+    expect(transport.calls).toBe(2);
+    expect(run.state).toBe("CLEARED");
+  });
+
+  it("a line-mapping call that used up its 45 s is not retried: the run is FAILED (retryable), never guessed", async () => {
+    const clock = { t: 0 };
+    const transport = new SlowTransport(clock, 50_000, () => http(503));
+    const proposer = new GeminiMappingProposer({ model: "m", reference, transport, sleep: noSleep, now: () => clock.t });
+    const run = await deliver({ ...makeDeps(), proposer }, "S14", {});
+    expect(transport.calls).toBe(1);
+    expect(run.state).toBe("FAILED");
+    expect(run.failure).toMatch(/45 s time budget was used up after 1 call$/);
+  });
+
+  it("GEMINI_TIMEOUT_MS sets the per-call timeout within 5-90 s; anything else falls back to 60 s", () => {
+    const timeoutOf = (env: Record<string, string>) => (transportFromEnv("k", env) as unknown as { opts: { timeoutMs: number } }).opts.timeoutMs;
+    expect(timeoutOf({ GEMINI_TIMEOUT_MS: "45000" })).toBe(45_000);
+    expect(timeoutOf({ GEMINI_TIMEOUT_MS: "600000" })).toBe(60_000);
+    expect(timeoutOf({})).toBe(60_000);
   });
 });
 

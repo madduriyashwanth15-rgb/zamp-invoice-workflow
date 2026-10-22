@@ -11,5 +11,6 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     exclude: ["tests/live/**", "node_modules/**"],
     env: localEnv(".env.test.local"),
+    hookTimeout: 60_000,
   },
 });

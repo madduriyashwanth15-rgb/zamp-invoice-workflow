@@ -15,7 +15,7 @@ import { detail, summarize, type RunDetail, type RunSummary } from "@/server/vie
 // into view models; every rule lives in src/domain.
 
 /** A run still PROCESSING after this long was interrupted (for example the function was stopped). */
-const STUCK_AFTER_MS = 8 * 60_000; // above the worst case of 6 provider calls with timeouts and backoff
+const STUCK_AFTER_MS = 6 * 60_000; // above the 300 s function limit, which the extractor's time budget stays under
 
 export async function listRuns(): Promise<{ runs: RunSummary[]; exports: { export_id: string; created_by: string; created_at: string; count: number }[] }> {
   const { deps } = runtime();

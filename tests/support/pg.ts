@@ -13,7 +13,10 @@ const schemas: string[] = [];
 export function testPool(): Pool {
   const url = process.env.TEST_DATABASE_URL;
   if (!url) throw new Error("TEST_STORE=pg needs TEST_DATABASE_URL");
-  pool ??= new Pool({ connectionString: url, max: 8 });
+  if (!pool) {
+    pool = new Pool({ connectionString: url, max: 8 });
+    pool.on("error", (e) => console.error(`postgres: idle connection closed (${e.message})`));
+  }
   return pool;
 }
 
