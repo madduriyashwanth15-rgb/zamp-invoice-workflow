@@ -169,7 +169,7 @@ function explainFinding(f: Finding, x: Facts): string {
     }
     case "PO_AMOUNT_EXCEEDED": {
       if (e.po_remaining != null) {
-        return `${lineName} is billed as a lump sum of ${inr(e.amount)}, more than the ${inr(e.po_remaining)} that remains on ${x.po} (PO value ${inr(e.po_subtotal)} before GST).`;
+        return `${lineName} is billed as a lump sum of ${inr(e.amount)} before GST, more than the ${inr(e.po_remaining)} that remains on ${x.po} (PO value ${inr(e.po_subtotal)} before GST).`;
       }
       const already = new Decimal(String(e.already_billed ?? 0));
       const sum = new Decimal(String(e.invoiced_pretax ?? 0)).plus(already).toFixed(2);
@@ -185,7 +185,9 @@ function explainFinding(f: Finding, x: Facts): string {
       return `${lineName}: GST is charged at ${ratePct(e.invoice_rate)}, but ${x.po} has ${ratePct(e.po_rate)}.`;
     case "MISSING_REQUIRED_FIELD":
       if (e.field === "bank account") {
-        return `A bank account is printed ("${e.printed_wording}"), but it was not read, so it was not compared with the account on file (ending ${e.master_last4}).`;
+        return /^read as /.test(String(e.printed_wording))
+          ? `A bank account appears on the document (${e.printed_wording}), but no account number was read, so it was not compared with the account on file (ending ${e.master_last4}).`
+          : `A bank account is printed ("${e.printed_wording}"), but it was not read, so it was not compared with the account on file (ending ${e.master_last4}).`;
       }
       return `Not found on the invoice as read: ${list(strs(e.missing))}.`;
     case "EVIDENCE_NOT_FOUND": {
@@ -200,13 +202,13 @@ function explainFinding(f: Finding, x: Facts): string {
       return `The total, ${inr(e.total)}, is above the ${inr(e.limit)} approval limit.`;
     case "UNAPPROVED_CHARGE": {
       if (e.po_amount == null) {
-        return `${lineName} is a charge of ${inr(e.amount)}, and ${x.po} has no charge line for it.`;
+        return `${lineName} is a charge of ${inr(e.amount)} before GST, and ${x.po} has no charge line for it.`;
       }
       const already = new Decimal(String(e.already_billed ?? 0));
-      return `${lineName}: ${inr(e.amount)}${already.gt(0) ? ` plus ${inr(e.already_billed)} already billed` : ""} is more than the ${inr(e.po_amount)} ${x.po} allows for this charge.`;
+      return `${lineName}: ${inr(e.amount)} before GST${already.gt(0) ? ` plus ${inr(e.already_billed)} already billed` : ""} is more than the ${inr(e.po_amount)} ${x.po} allows for this charge.`;
     }
     case "BUNDLED_QUANTITY_UNVERIFIED":
-      return `${lineName} is billed as a lump sum of ${inr(e.amount)}, so there is no quantity to check against ${x.po}.`;
+      return `${lineName} is billed as a lump sum of ${inr(e.amount)} before GST, so there is no quantity to check against ${x.po}.`;
     case "LINE_UNMAPPED":
       if (e.earlier_invoice_line != null) {
         return `Line ${n} matches ${x.po} line ${e.po_line}, which invoice line ${e.earlier_invoice_line} already bills; one PO line is billed once per invoice.`;
@@ -255,6 +257,7 @@ function explainFinding(f: Finding, x: Facts): string {
     case "POSSIBLE_DUPLICATE":
       return `${x.ctx.refOf(String(e.earlier_run))} has a different invoice number but the same vendor, date (${formatDate(String(e.invoice_date))}) and total (${inr(e.total)}).`;
     case "CLASSIFICATION_CONFLICT":
+      if (e.word != null && e.doc_type !== "invoice") return `${readerName(run)} read it as ${String(e.doc_type).replace(/_/g, " ")}, and its ${e.found_in} says "${e.word}": not a tax invoice.`;
       if (e.word != null) return `It was read as an invoice, but the ${e.found_in} says "${e.word}", which is not a tax invoice.`;
       return `${readerName(run)} read it as ${String(e.doc_type).replace(/_/g, " ")}, but its ${e.title ? `title "${e.title}"` : `number label "${e.number_label}"`} says invoice.`;
     case "CREDIT_NOTE_UNSUPPORTED":
@@ -288,7 +291,7 @@ function vendorSentence(f: Finding, x: Facts): string | null {
       return `${lineName} bills ${num(e.invoiced)} ${uom}, but ${num(left)} ${uom} remain on purchase order ${x.po} (${num(e.ordered)} ordered${already.gt(0) ? `, ${num(already)} already invoiced` : ""}).`;
     }
     case "PO_AMOUNT_EXCEEDED": {
-      if (e.po_remaining != null) return `${lineName} bills a lump sum of ${inr(e.amount)}, more than the ${inr(e.po_remaining)} remaining on purchase order ${x.po}.`;
+      if (e.po_remaining != null) return `${lineName} bills a lump sum of ${inr(e.amount)} before GST, more than the ${inr(e.po_remaining)} remaining on purchase order ${x.po}.`;
       const sum = new Decimal(String(e.invoiced_pretax ?? 0)).plus(String(e.already_billed ?? 0)).toFixed(2);
       return `This invoice brings the amount billed on purchase order ${x.po} to ${inr(sum)} before GST, above the order value of ${inr(e.po_subtotal)}.`;
     }
@@ -314,8 +317,8 @@ function vendorSentence(f: Finding, x: Facts): string | null {
       return `Purchase order ${e.po} is ${String(e.status).toLowerCase()} and cannot be billed.`;
     case "UNAPPROVED_CHARGE":
       return e.po_amount == null
-        ? `${lineName} for ${inr(e.amount)} is not on purchase order ${x.po}. Please remove it, or tell us who approved it.`
-        : `${lineName} bills ${inr(e.amount)}; purchase order ${x.po} allows ${inr(e.po_amount)} for it${new Decimal(String(e.already_billed ?? 0)).gt(0) ? `, and ${inr(e.already_billed)} has already been invoiced` : ""}.`;
+        ? `${lineName} for ${inr(e.amount)} before GST is not on purchase order ${x.po}. Please remove it, or tell us who approved it.`
+        : `${lineName} bills ${inr(e.amount)} before GST; purchase order ${x.po} allows ${inr(e.po_amount)} for it${new Decimal(String(e.already_billed ?? 0)).gt(0) ? `, and ${inr(e.already_billed)} has already been invoiced` : ""}.`;
     case "DATE_INVALID":
       return `The invoice is dated ${formatDate(String(e.invoice_date))}, which is in the future.`;
     case "SCAN_UNVERIFIED":
@@ -440,6 +443,8 @@ export function issuesOf(ctx: ExplainContext): IssueView[] {
   const x = factsOf(ctx);
   const offered = new Set((ctx.actions ?? []).map((a) => a.action));
   const advise = run.state === "ON_HOLD";
+  // U12: a MOCK run's line proposals came from the scripted MOCK proposer; nothing may call them AI.
+  const unAi = (t: string) => (readerName(run) === "The AI" ? t : t.replace(/\bAI\b/g, "MOCK"));
   const findings = run.engine?.blocking ?? [];
   // An AI match rejected on a line explains the line's other codes (unmatched, unit unverified): one issue.
   const aiRejected = new Set(findings.filter((f) => f.code === "AI_PROPOSAL_REJECTED").map((f) => f.line_no));
@@ -449,8 +454,8 @@ export function issuesOf(ctx: ExplainContext): IssueView[] {
     const paired = f.code === "AI_PROPOSAL_REJECTED" ? findings.filter((g) => g !== f && g.line_no === f.line_no && (g.code === "LINE_UNMAPPED" || g.code === "UOM_UNSUPPORTED")) : [];
     out.push({
       codes: [f.code, ...paired.map((g) => g.code)],
-      title: CODE_TEXT[f.code]?.title ?? f.code,
-      explain: explainFinding(f, x),
+      title: unAi(CODE_TEXT[f.code]?.title ?? f.code),
+      explain: unAi(explainFinding(f, x)),
       next: advise ? adviceText(adviceFor({ code: f.code, finding: f }, x), offered) : null,
       line_no: f.line_no ?? null,
       vendor_fixable: vendorFixable(f) || paired.some(vendorFixable),

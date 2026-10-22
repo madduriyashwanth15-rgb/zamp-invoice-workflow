@@ -106,8 +106,14 @@ export function proposalSupport(
   if (target.item_code && line.description.toLowerCase().includes(target.item_code.toLowerCase())) {
     return { ok: true, reason: `PO item code ${target.item_code} printed on the line` };
   }
-  if (packEvidence) return { ok: true, reason: "catalog pack size printed on the line and read the same by the AI" };
+  if (packEvidence) return { ok: true, reason: "catalog pack size printed on the line and read the same by the proposer" };
+  // Words in common must name the item, not just share one word with it: "container lid" is not a "food container".
+  // Two item words in common, or every item word of a one-word PO description.
   const shared = [...itemWords(line.description)].filter((w) => itemWords(poText).has(w));
-  if (shared.length) return { ok: true, reason: `item words in common: ${shared.join(", ")}` };
+  const poWords = itemWords(target.description);
+  if (shared.length >= 2 || (poWords.size === 1 && shared.some((w) => poWords.has(w)))) {
+    return { ok: true, reason: `item words in common: ${shared.join(", ")}` };
+  }
+  if (shared.length === 1) return { ok: false, reason: `only one item word in common (${shared[0]}): not enough to show it is the same item` };
   return { ok: false, reason: "no item code, pack evidence or item word on the invoice line supports this PO line" };
 }

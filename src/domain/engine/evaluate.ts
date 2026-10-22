@@ -30,7 +30,7 @@ const NOT_INVOICE_TEXT = /\b(quotation|estimate|delivery\s+challan)\b/i;
 const INVOICE_TEXT = /\b(tax\s+invoice|bill\s+of\s+supply)\b/i;
 
 /** K4b (spec v1.4): wording that shows a bank account is printed, so "no account read" is a misread, not an absence. */
-export const BANK_WORDING = /(?<![a-z])(a\/c|account\s*(no|number)|ifsc)(?![a-z])/i;
+export const BANK_WORDING = /(?<![a-z])(a\/c|acct|account\s*(no|number|#)|ifsc|bank\s*account)(?![a-z])/i;
 const PAYABLE = new Set(["CLEARED", "APPROVED"]);
 const HOLD_FAMILY = new Set(["ON_HOLD", "AWAITING_VENDOR"]);
 
@@ -163,8 +163,12 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
     }
   } else {
     if (invoiceWording) {
+      // "PROFORMA INVOICE" says invoice too, but a proforma is not a tax invoice: keep the word, so the hold is the
+      // vendor's to fix (send the tax invoice) and is not presented as our reader's mistake.
+      const proforma = PROFORMA_TEXT.exec(titleAndLabel) ?? NOT_INVOICE_TITLE.exec(titleAndLabel);
       t.add("CLASSIFICATION_CONFLICT", "AI says this is not an invoice, but the title or number label says invoice (G2)", {
         doc_type: ex.doc_type, title: ex.document_title, number_label: ex.number_label,
+        ...(proforma ? { word: proforma[0], found_in: "title or number label" } : {}),
       });
     } else if (doc.g1_bypassed) {
       t.note("G1 bypassed by a reviewer (process as invoice, row 5); every other check runs");
@@ -270,10 +274,13 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
     for (const st of ["duplicates", "po", "lines", "compare"] as StageId[]) t.notEvaluated(st, "vendor unknown");
     return decide(t, result, input);
   }
-  const printedBank = !ex.bank_account_last4 && !ex.bank_account_number ? BANK_WORDING.exec(doc.text_layer) : null;
+  // K4b: no account digits were read (an unreadable value such as "XXXX XXXX" counts as not read), yet the page
+  // shows bank wording, or the reader returned something for the account: a misread, not an absence.
+  const readAs = ex.bank_account_number?.trim() ? `read as "${ex.bank_account_number.trim()}"` : null;
+  const printedBank = !ex.bank_account_last4 ? (BANK_WORDING.exec(doc.text_layer)?.[0] ?? readAs) : null;
   if (printedBank) {
     t.add("MISSING_REQUIRED_FIELD", "A bank account is printed on the document but was not read; it cannot be checked against the vendor master (K4b)", {
-      field: "bank account", printed_wording: printedBank[0], master_last4: vendor.bank_last4,
+      field: "bank account", printed_wording: printedBank, master_last4: vendor.bank_last4,
       action: `Read the account on the document and compare it with the master (ending ${vendor.bank_last4}); if it differs, verify by phone using ${vendor.phone}`,
     });
   } else if (!ex.bank_account_last4) {
@@ -402,8 +409,11 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
   // person approves the invoice by override: the PO is then used up and a later invoice cannot clear against it too.
   const matches: LineMatch[] = [];
   const poLineOf = (n: number | null | undefined) => (n == null ? undefined : po.lines.find((pl) => pl.line_no === n));
-  const heldAtPoLevel = (line: ExtractionLine, code: ReasonCode, poLineNo?: number) => {
-    consumption.push({ po_number: po.po_number, line_no: 0, base_qty: "0", amount_paise: preTaxPaise(line, basis) });
+  // A held line still counts if a reviewer approves the invoice. When the code knows which PO line it bills (an
+  // over-cap charge, a second line on an already-billed PO line), it counts there, so the per-line caps (M7 charge
+  // amount, C2 quantity) see it; otherwise at PO level (line 0, amount only, for C3).
+  const heldAtPoLevel = (line: ExtractionLine, code: ReasonCode, poLineNo?: number, countOn?: { line: number; baseQty: string }) => {
+    consumption.push({ po_number: po.po_number, line_no: countOn?.line ?? 0, base_qty: countOn?.baseQty ?? "0", amount_paise: preTaxPaise(line, basis) });
     matches.push(lineMatch(line, poLineOf(poLineNo), "held", code));
   };
 
@@ -423,7 +433,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
           t.add("UNAPPROVED_CHARGE", `Charge exceeds the PO charge line by more than ${tol}% (M7)`, {
             keywords, amount: r(amount), already_billed: r(already), po_amount: r(poCharge.line_amount_pretax),
           }, line.line_no);
-          heldAtPoLevel(line, "UNAPPROVED_CHARGE", poCharge.line_no);
+          heldAtPoLevel(line, "UNAPPROVED_CHARGE", poCharge.line_no, { line: poCharge.line_no, baseQty: "1" });
         } else {
           t.note(`M7: line ${line.line_no} "${line.description}" accepted against PO charge line ${poCharge.line_no}`);
           consumption.push({ po_number: po.po_number, line_no: poCharge.line_no, base_qty: "1", amount_paise: amount });
@@ -478,7 +488,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
       if (!u.ok || !packOk) {
         t.add("AI_PROPOSAL_REJECTED", `AI proposed PO line ${target.line_no}, but code could not verify it (M3)`, {
           proposal: proposal.justification, proposed_po_line: target.line_no, pack_size_read: proposal.pack_size_read,
-          printed_pack_size: printed, reason: u.ok ? `pack size: printed ${printed}, AI read ${proposal.pack_size_read}, catalog ${u.factor}` : u.reason,
+          printed_pack_size: printed, reason: u.ok ? `pack size: printed ${printed}, proposal read ${proposal.pack_size_read}, catalog ${u.factor}` : u.reason,
         }, line.line_no);
         t.add("UOM_UNSUPPORTED", `Line ${line.line_no}: unit conversion not verified (M3)`, { invoice_unit: line.uom, po_unit: target.uom }, line.line_no);
         heldAtPoLevel(line, "AI_PROPOSAL_REJECTED", target.line_no);
@@ -513,7 +523,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
       t.add("LINE_UNMAPPED", `Line ${line.line_no} maps to PO line ${poLine.line_no}, already matched by invoice line ${earlier} (M4)`, {
         po_line: poLine.line_no, earlier_invoice_line: earlier,
       }, line.line_no);
-      heldAtPoLevel(line, "LINE_UNMAPPED", poLine.line_no);
+      heldAtPoLevel(line, "LINE_UNMAPPED", poLine.line_no, { line: poLine.line_no, baseQty: new Decimal(line.qty ?? 0).mul(factor).toString() });
       continue;
     }
     used.set(poLine.line_no, line.line_no);
@@ -533,6 +543,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
     if (line.unit_price == null || line.qty == null) {
       t.add("LINE_UNMAPPED", `Line ${line.line_no} has no quantity or unit price to compare`, { po_line: poLine.line_no }, line.line_no);
       matches.push(lineMatch(line, poLine, "held", "LINE_UNMAPPED"));
+      consumption.push({ po_number: po.po_number, line_no: poLine.line_no, base_qty: m.baseQty.toString(), amount_paise: m.preTax }); // counts if approved
       continue;
     }
     const verdict = c1Compare(line.unit_price, poLine.unit_price_pretax, basis, line.gst_rate ?? 0, m.factor, tol);

@@ -102,3 +102,18 @@ describe("samePhone", () => {
     ["1002", "+91 80 0000 1002", false],
   ])("%s vs %s -> %s", (a, b, same) => expect(samePhone(a, b)).toBe(same));
 });
+
+describe("an unread bank account (K4b) needs the call too (review 23 Oct)", () => {
+  it("override of K4b asks for a callback to the master number, and names the master account in the confirmation", async () => {
+    const deps = makeDeps({ mutate: (e) => ({ ...e, bank_account_last4: null, bank_account_number: null }) });
+    const run = await deliver(deps, "S1", {});
+    expect(run.blocking_codes).toEqual(["MISSING_REQUIRED_FIELD"]);
+    const phone = masterPhone(run.vendor_id!);
+    const ask = await overrideApprove(deps, run.run_id, { ...DIVYA });
+    expect(ask).toMatchObject({ ok: false, code: "NEEDS_CALLBACK", details: { codes: ["MISSING_REQUIRED_FIELD"], master_phone: phone } });
+    const confirm = await overrideApprove(deps, run.run_id, { ...DIVYA, callback: { number_called: phone, ...CALL } });
+    expect(confirm).toMatchObject({ ok: false, code: "NEEDS_CONFIRMATION" });
+    if (!confirm.ok) expect((confirm.details!.problems as string[])[0]).toMatch(/^The bank account on the document was not read, so it was not checked against the vendor-master account ending \d{4}$/);
+    expect((await overrideApprove(deps, run.run_id, { ...DIVYA, ...called(phone) })).ok).toBe(true);
+  });
+});

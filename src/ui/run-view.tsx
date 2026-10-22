@@ -281,6 +281,9 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
               reference {run.correction_draft.token} is issued when you do.
             </p>
           )}
+          {run.blocking.some((c) => c.code === "MANUAL_HOLD") && (
+            <p className="mt-2 text-sm font-semibold text-hold-fg">The reason below is the hold note, quoted word for word. Check it is fit for the vendor before you send it.</p>
+          )}
           <p className="mt-3 text-sm font-semibold">Subject: {run.correction_draft.subject}</p>
           <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-rule bg-paper p-3 font-sans text-sm">{run.correction_draft.body}</pre>
           <div className="mt-3 flex flex-wrap gap-2">

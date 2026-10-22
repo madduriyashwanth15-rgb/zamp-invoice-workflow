@@ -2,12 +2,11 @@ import Decimal from "decimal.js";
 import { addDays } from "../dates";
 import { consumptionAgainst } from "../engine/evaluate";
 import { exceedsCap, paiseToRupees } from "../money";
-import { normInvoiceNumber, normText } from "../normalise";
 import type { ReferenceData } from "../engine/types";
 import { markCorrectionSent, nextToken } from "./actions";
 import { processRun, type PipelineDeps } from "./pipeline";
 import type { ReasonCode } from "../codes";
-import { callbackRequirement, overrideBlockedReason, poChoices, samePhone, vendorCanFix } from "./queries";
+import { callbackRequirement, overrideBlockedReason, poChoices, sameInvoicePayable, samePhone, vendorCanFix } from "./queries";
 import { pushEvent, transition, TransitionRefused } from "./state-machine";
 import type { Approval, CallbackRecord, ExportRecord, RunRecord, StoreState } from "./types";
 
@@ -86,27 +85,8 @@ function chainHasOtherPayable(tx: StoreState, run: RunRecord): RunRecord | undef
   return [...tx.runs.values()].find((r) => r.run_id !== run.run_id && r.chain_key === run.chain_key && PAYABLE.has(r.state));
 }
 
-/**
- * P9b (spec v1.4): the chain invariant also when the code could not build a chain (unknown vendor, failed reading).
- * Another CLEARED or APPROVED run with the same file, or with the same invoice number from the same vendor (master id,
- * or the printed name when the vendor is unknown), means this approval would pay the same invoice twice.
- */
-function sameInvoicePayable(tx: StoreState, run: RunRecord, exclude: Set<string> = new Set()): { other: RunRecord; why: string } | undefined {
-  const sha = tx.documents.get(run.run_id)?.sha256 ?? null;
-  const number = run.extraction?.invoice_number ? normInvoiceNumber(run.extraction.invoice_number) : null;
-  const vendorKey = (r: RunRecord) => r.vendor_id ?? (r.extraction?.vendor_name ? `name:${normText(r.extraction.vendor_name)}` : null);
-  for (const r of tx.runs.values()) {
-    if (r.run_id === run.run_id || exclude.has(r.run_id) || !PAYABLE.has(r.state)) continue;
-    if (sha && tx.documents.get(r.run_id)?.sha256 === sha) return { other: r, why: "the same file" };
-    if (number && vendorKey(run) && r.extraction?.invoice_number && normInvoiceNumber(r.extraction.invoice_number) === number && vendorKey(r) === vendorKey(run)) {
-      return { other: r, why: `invoice number ${run.extraction!.invoice_number} from the same vendor` };
-    }
-  }
-  return undefined;
-}
-
 function guardSameInvoice(tx: StoreState, run: RunRecord, exclude?: Set<string>) {
-  const dup = sameInvoicePayable(tx, run, exclude);
+  const dup = sameInvoicePayable(run, tx, exclude);
   if (dup) throw new Refusal("INVALID_TRANSITION_BLOCKED", `POSSIBLE_DOUBLE_BILLING: ${dup.other.ref} is already ${dup.other.state} for ${dup.why}`);
 }
 
@@ -166,6 +146,7 @@ export function approve(deps: Deps, runIds: string[], ctx: ActionCtx & { expecte
       if (run.export_blocked) throw new Refusal("INVALID_TRANSITION_BLOCKED", `${run.ref} is export-blocked (${run.export_block_reason})`);
       const other = chainHasOtherPayable(tx, run);
       if (other) throw new Refusal("INVALID_TRANSITION_BLOCKED", `CHAIN_INVARIANT: ${other.ref} is already ${other.state} for this invoice number`);
+      guardSameInvoice(tx, run, new Set(runIds));
       transition(tx, run, 6, "APPROVED", { actor: ctx.actor, at, details: { mode: batchId ? "batch" : "individual", batch_id: batchId } });
       recordApproval(tx, run, { approver_display_name: ctx.actor, approved_at: at, mode: batchId ? "batch" : "individual", batch_id: batchId, note: null }, deps.reference);
       return run;
@@ -205,6 +186,7 @@ function checkCallback(run: RunRecord, ref: ReferenceData, at: string, ctx: { ca
       const f = run.engine?.blocking.find((x) => x.code === code);
       if (code === "BANK_DETAILS_CHANGED") return `Payment would go to the account ending ${f?.evidence.printed_last4 ?? "?"}, not the vendor-master account ending ${f?.evidence.master_last4 ?? vendor?.bank_last4 ?? "?"}`;
       if (code === "SENDER_UNVERIFIED") return `The invoice came from ${run.sender_email ?? "an unverified sender"}, which is not verified for ${vendor?.legal_name ?? "this vendor"}`;
+      if (code === "MISSING_REQUIRED_FIELD") return `The bank account on the document was not read, so it was not checked against the vendor-master account ending ${vendor?.bank_last4 ?? "?"}`;
       if (code === "VENDOR_UNKNOWN") return `${run.extraction?.vendor_name ?? "This vendor"} is not in the vendor master; nothing about it was checked`;
       return `The GSTIN printed (${f?.evidence.printed ?? "?"}) is not the vendor master's (${f?.evidence.master ?? "?"})`;
     });
@@ -215,6 +197,7 @@ function checkCallback(run: RunRecord, ref: ReferenceData, at: string, ctx: { ca
 
 const CALLBACK_WHAT: Partial<Record<ReasonCode, string>> = {
   VENDOR_UNKNOWN: "the vendor", VENDOR_GSTIN_MISMATCH: "the vendor's GSTIN", SENDER_UNVERIFIED: "the sender", BANK_DETAILS_CHANGED: "the bank account",
+  MISSING_REQUIRED_FIELD: "the bank account",
 };
 
 /** Rows 9 and 14: approve a held run by override. C2/C3 re-run; failing them needs a second confirmation. Never supersedes. */
@@ -236,6 +219,9 @@ export function overrideApprove(
     const choices = poChoices(run, deps.reference);
     let namedPo: string | null = null;
     if (choices && run.extraction) {
+      if (choices.length === 0) {
+        throw new Refusal("INVALID_TRANSITION_BLOCKED", "No purchase order was found, and this vendor has no open PO to approve it against: request a correction or reject it");
+      }
       if (!ctx.poNumber) throw new Refusal("NEEDS_PO", "No purchase order was found for this invoice: choose the PO it belongs to", { po_choices: choices });
       if (!choices.includes(ctx.poNumber)) {
         throw new Refusal("INVALID_TRANSITION_BLOCKED", `${ctx.poNumber} is not an open PO of this vendor (open: ${choices.join(", ") || "none"})`);

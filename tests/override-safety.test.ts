@@ -206,3 +206,47 @@ describe("correction requests only for what the vendor can fix (audit U03)", () 
     expect((await requestCorrection(deps, s3.run_id, { ...DIVYA, channel: "marked sent manually" })).ok).toBe(true);
   });
 });
+
+describe("P9b when one copy was not matched to the vendor master (review 23 Oct)", () => {
+  const rescan = (): Extraction => ({ ...extractionOf("S1"), vendor_gstin: null, vendor_name: "FreshPack Packaging Private Limited" });
+
+  it("S1 approved, then a re-scan with the vendor misread: the override is refused as the same invoice", async () => {
+    const { deps, send } = setup();
+    const s1 = await send("s1.pdf", extractionOf("S1"));
+    expect(s1.state).toBe("CLEARED");
+    expect((await approve(deps, [s1.run_id], DIVYA)).ok).toBe(true);
+    const twin = await send("rescan.pdf", rescan(), { sha256: "different-scan" });
+    expect(twin.blocking_codes).toContain("VENDOR_UNKNOWN");
+    expect(availableActions(twin, await deps.store.read((s) => ({ runs: s.runs })), deps.reference).map((a) => a.action)).not.toContain("override_approve");
+    const r = await overrideApprove(deps, twin.run_id, { ...DIVYA, note: "Looks fine", ...called() });
+    expect(r).toMatchObject({ ok: false, code: "INVALID_TRANSITION_BLOCKED" });
+    if (!r.ok) expect(r.reason).toMatch(/^POSSIBLE_DOUBLE_BILLING: .* same total/);
+  });
+
+  it("the misread copy approved first: the clean S1 clears but cannot be approved, and approve is not offered", async () => {
+    const { deps, send } = setup();
+    const twin = await send("rescan.pdf", rescan(), { sha256: "scan-1" });
+    expect((await overrideApprove(deps, twin.run_id, { ...DIVYA, note: "Checked by phone", ...called() })).ok).toBe(true);
+    const s1 = await send("s1.pdf", extractionOf("S1"), { sha256: "scan-2" });
+    expect(s1.state).toBe("CLEARED");
+    expect(availableActions(s1, await deps.store.read((s) => ({ runs: s.runs })), deps.reference).map((a) => a.action)).toEqual(["manual_hold"]);
+    const r = await approve(deps, [s1.run_id], DIVYA);
+    expect(r).toMatchObject({ ok: false, code: "INVALID_TRANSITION_BLOCKED" });
+    const x = await exportApproved(deps, DIVYA);
+    expect(x.ok && x.value.record.run_ids).toEqual([twin.run_id]);
+  });
+
+  it("a known vendor with no open PO is not offered an override that could never succeed", async () => {
+    const { deps, send } = setup();
+    const ref = structuredClone(deps.reference);
+    for (const p of ref.purchaseOrders) if (p.vendor_id === "V01") p.status = "closed";
+    deps.reference = ref; // FreshPack has no open PO in this database
+    const run = await send("nopo.pdf", { ...extractionOf("S1"), po_reference: null });
+    expect(run.blocking_codes).toEqual(["PO_NOT_FOUND"]);
+    expect(run.po_number).toBeNull();
+    expect(availableActions(run, { runs: new Map() }, ref).map((a) => a.action)).not.toContain("override_approve");
+    const r = await overrideApprove(deps, run.run_id, { ...DIVYA, note: "pay it", poNumber: "PO-1001" });
+    expect(r).toMatchObject({ ok: false, code: "INVALID_TRANSITION_BLOCKED" });
+    if (!r.ok) expect(r.reason).toMatch(/no open PO/);
+  });
+});

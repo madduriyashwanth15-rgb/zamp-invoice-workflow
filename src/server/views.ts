@@ -198,7 +198,8 @@ function slipOf(run: RunRecord): SlipMark[] {
     const status: SlipMark["status"] = !st || st.status === "not_evaluated" ? (reading ? "waiting" : "not_reached") : st.status;
     return { id, title: ENGINE_TITLES[id], status, ai: false };
   });
-  const decided = run.state === "APPROVED" || (run.state === "REJECTED" && run.primary_reason !== "DUPLICATE_INVOICE") || run.state === "SUPERSEDED";
+  // A replaced invoice may have been replaced automatically (row 15), so it is not counted as a reviewer's decision.
+  const decided = run.state === "APPROVED" || (run.state === "REJECTED" && run.primary_reason !== "DUPLICATE_INVOICE");
   const review: SlipMark = {
     id: "review", title: "Reviewer decision", ai: false,
     status: decided ? "done" : run.state === "CLEARED" || run.state === "ON_HOLD" || run.state === "AWAITING_VENDOR" ? "waiting" : "not_reached",

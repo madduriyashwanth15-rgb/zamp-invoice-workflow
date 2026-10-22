@@ -1,4 +1,5 @@
 import type { ReasonCode } from "../codes";
+import { normInvoiceNumber, normText } from "../normalise";
 import type { Finding, ReferenceData } from "../engine/types";
 import type { RunRecord, StoreState } from "./types";
 
@@ -40,6 +41,8 @@ export const CALLBACK_CODES: readonly ReasonCode[] = ["VENDOR_UNKNOWN", "VENDOR_
 
 export function callbackRequirement(run: RunRecord, ref?: ReferenceData): CallbackRequirement | undefined {
   const codes = run.blocking_codes.filter((c) => CALLBACK_CODES.includes(c));
+  // An unread bank account (K4b) is a bank hold too: approving it pays an account nobody compared with the master.
+  if ((run.engine?.blocking ?? []).some((f) => f.code === "MISSING_REQUIRED_FIELD" && f.evidence.field === "bank account")) codes.push("MISSING_REQUIRED_FIELD");
   if (!codes.length) return undefined;
   const vendor = run.vendor_id ? ref?.vendors.find((v) => v.vendor_id === run.vendor_id) : undefined;
   return { codes, master_phone: vendor?.phone ?? null };
@@ -86,6 +89,32 @@ export function overrideBlockedReason(run: RunRecord): string | null {
   return null;
 }
 
+const PAYABLE_STATES = new Set(["CLEARED", "APPROVED"]);
+
+/**
+ * P9b (spec v1.4): the chain invariant also when the code could not build a chain (unknown vendor, failed reading).
+ * Another CLEARED or APPROVED run is the same invoice when it has the same file, or the same invoice number and
+ * either the same vendor (master id, or the printed name when unknown) or, when either run was not matched to the
+ * vendor master, the same total: a re-scan whose vendor was misread must not be paid a second time.
+ */
+export function sameInvoicePayable(
+  run: RunRecord, s: Pick<StoreState, "runs"> & Partial<Pick<StoreState, "documents">>, exclude: Set<string> = new Set(),
+): { other: RunRecord; why: string } | undefined {
+  const sha = s.documents?.get(run.run_id)?.sha256 ?? null;
+  const number = run.extraction?.invoice_number ? normInvoiceNumber(run.extraction.invoice_number) : null;
+  const vendorKey = (r: RunRecord) => r.vendor_id ?? (r.extraction?.vendor_name ? `name:${normText(r.extraction.vendor_name)}` : null);
+  for (const r of s.runs.values()) {
+    if (r.run_id === run.run_id || exclude.has(r.run_id) || !PAYABLE_STATES.has(r.state)) continue;
+    if (sha && s.documents?.get(r.run_id)?.sha256 === sha) return { other: r, why: "the same file" };
+    if (!number || !r.extraction?.invoice_number || normInvoiceNumber(r.extraction.invoice_number) !== number) continue;
+    if (vendorKey(run) && vendorKey(r) === vendorKey(run)) return { other: r, why: `invoice number ${run.extraction!.invoice_number} from the same vendor` };
+    if ((!run.vendor_id || !r.vendor_id) && run.total_paise != null && run.total_paise === r.total_paise) {
+      return { other: r, why: `invoice number ${run.extraction!.invoice_number} with the same total (one of them is not matched to the vendor master)` };
+    }
+  }
+  return undefined;
+}
+
 /** Open POs of the run's vendor, when the code found none for it (the reviewer names one at override). */
 export function poChoices(run: RunRecord, ref?: ReferenceData): string[] | undefined {
   if (!ref || run.po_number || !run.vendor_id) return undefined;
@@ -96,9 +125,11 @@ export function poChoices(run: RunRecord, ref?: ReferenceData): string[] | undef
  * Actions a reviewer may attempt on a run in its current state (section 11, user rows). This only decides what
  * to offer; the review functions re-check every guard inside the transaction and refuse with a logged reason.
  */
-export function availableActions(run: RunRecord, s: Pick<StoreState, "runs">, ref?: ReferenceData): ActionOption[] {
+export function availableActions(run: RunRecord, s: Pick<StoreState, "runs"> & Partial<Pick<StoreState, "documents">>, ref?: ReferenceData): ActionOption[] {
   const out: ActionOption[] = [];
-  const canOverride = overrideBlockedReason(run) === null;
+  // A known vendor with no open PO cannot be approved against one (C4b), so the override is not offered at all.
+  const noOpenPo = poChoices(run, ref)?.length === 0;
+  const canOverride = overrideBlockedReason(run) === null && !noOpenPo && !sameInvoicePayable(run, s);
   const callback = callbackRequirement(run, ref);
   const override = (row: number): ActionOption => ({
     action: "override_approve", row, needsNote: true, ...(poChoices(run, ref) ? { po_choices: poChoices(run, ref) } : {}), ...(callback ? { callback } : {}),
@@ -106,7 +137,7 @@ export function availableActions(run: RunRecord, s: Pick<StoreState, "runs">, re
   const only = (code: string) => run.blocking_codes.length === 1 && run.blocking_codes[0] === code;
   switch (run.state) {
     case "CLEARED":
-      if (!run.export_blocked) out.push({ action: "approve", row: 6, needsNote: false });
+      if (!run.export_blocked && !sameInvoicePayable(run, s)) out.push({ action: "approve", row: 6, needsNote: false });
       out.push({ action: "manual_hold", row: 7, needsNote: true });
       break;
     case "ON_HOLD": {

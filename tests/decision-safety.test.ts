@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Extraction } from "@/domain/extraction-schema";
 import { TEST_DATA_DIR } from "@/fixtures/load";
+import { BANK_WORDING } from "@/domain/engine/evaluate";
 import { readTextLayer } from "@/server/pdf-text";
 import { codes, evalDirect, extractionOf, infos } from "./support/direct";
 import { AnswerKeyProposer, tests } from "./support/harness";
@@ -36,7 +37,7 @@ describe("K4b (spec v1.4): a printed bank account the reader leaves out is held,
   });
 
   it("no bank wording on the page and nothing read -> info BANK_NOT_SHOWN and S1 still clears", async () => {
-    const text = (await textOf("S1")).split("\n").filter((l) => !/a\/c|account\s*(no|number)|ifsc/i.test(l)).join("\n");
+    const text = (await textOf("S1")).split("\n").filter((l) => !BANK_WORDING.test(l)).join("\n");
     const r = await evalDirect(noBank(extractionOf("S1")), doc(text));
     expect(r.outcome).toBe("CLEARED");
     expect(infos(r)).toContain("BANK_NOT_SHOWN");
@@ -156,5 +157,45 @@ describe("V3b (spec v1.4): an amount must be printed as a whole number, not foun
       const r = await evalDirect(extractionOf(id), doc(await textOf(id)));
       expect(codes(r), id).not.toContain("EVIDENCE_NOT_FOUND");
     }
+  });
+});
+
+describe("K4b also when the reader returns an account with no digits (review 23 Oct)", () => {
+  it('"XXXX XXXX" read for the account, the real number printed: held, not cleared, and not called "no bank account printed"', async () => {
+    const text = (await textOf("S1")).replace(/50200012344417/g, "50200012340042");
+    const r = await evalDirect({ ...extractionOf("S1"), bank_account_last4: null, bank_account_number: "XXXX XXXX" }, doc(text));
+    expect(r.outcome).toBe("ON_HOLD");
+    expect(codes(r)).toEqual(["MISSING_REQUIRED_FIELD"]);
+    expect(infos(r)).not.toContain("BANK_NOT_SHOWN");
+  });
+
+  it("a value with no digits and no bank wording on the page still holds: the reader saw something", async () => {
+    const text = (await textOf("S1")).split("\n").filter((l) => !BANK_WORDING.test(l)).join("\n");
+    const r = await evalDirect({ ...extractionOf("S1"), bank_account_last4: null, bank_account_number: "N/A" }, doc(text));
+    expect(finding(r, "MISSING_REQUIRED_FIELD")!.evidence.printed_wording).toBe('read as "N/A"');
+  });
+
+  it.each(["Acct No: 50200012340042", "Bank Account: 50200012340042", "Account # 50200012340042"])("bank wording %s is recognised", (w) => {
+    expect(BANK_WORDING.test(w)).toBe(true);
+  });
+
+  it.each(["Accounts payable", "Account notes", "account manager"])("ordinary words %s are not bank wording", (w) => {
+    expect(BANK_WORDING.test(w)).toBe(false);
+  });
+});
+
+describe("M3b: one shared word is not enough (review 23 Oct)", () => {
+  const proposeLine = (n: number) => new AnswerKeyProposer(() => ({ proposed_po_line: n, pack_size_read: null, justification: `scripted: PO line ${n}` }));
+  const withLine1 = (description: string): Extraction => {
+    const e = extractionOf("S1");
+    return { ...e, lines: e.lines.map((l) => (l.line_no === 1 ? { ...l, description } : l)) };
+  };
+  it.each(["Container lid 500 ml", "Food tray (round, PP)", "Paper food box"])("%s proposed for the food container is rejected", async (d) => {
+    const r = await evalDirect(withLine1(d), { proposer: proposeLine(1) });
+    expect(codes(r)).toEqual(["AI_PROPOSAL_REJECTED", "LINE_UNMAPPED"]);
+  });
+  it("two item words in common (food, container) still match", async () => {
+    const r = await evalDirect(withLine1("Container for food, round"), { proposer: proposeLine(1) });
+    expect(r.outcome).toBe("CLEARED");
   });
 });

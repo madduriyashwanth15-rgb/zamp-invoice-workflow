@@ -88,7 +88,8 @@ function Ledger({ runs, loaded }: { runs: RunSummary[]; loaded: boolean }) {
     const rs = runs.filter(test);
     return { n: rs.length, sum: formatInr(sumRupees(rs.map((r) => r.total_rupees))), unread: rs.some((r) => r.total_rupees == null) };
   };
-  const review = group(FILTERS[0].test);
+  const review = group((r) => r.state === "ON_HOLD" || r.state === "FAILED");
+  const reading = runs.filter((r) => r.state === "RECEIVED" || r.state === "PROCESSING").length;
   const cleared = group((r) => r.state === "CLEARED");
   const ready = group((r) => r.state === "APPROVED" && !r.exported && !r.export_blocked);
   const waiting = group((r) => r.state === "AWAITING_VENDOR");
@@ -103,6 +104,7 @@ function Ledger({ runs, loaded }: { runs: RunSummary[]; loaded: boolean }) {
   if (review.n) parts.push(<span key="r"><span className="font-semibold text-ink">{invoices(review.n)}</span> need{review.n === 1 ? "s" : ""} a decision, {amount(review)} in all.</span>);
   if (cleared.n) parts.push(<span key="c"> {cleared.n} cleared by the checks, {amount(cleared)}, wait{cleared.n === 1 ? "s" : ""} for approval.</span>);
   if (ready.n) parts.push(<span key="a"> {ready.n} approved, {amount(ready)}, {ready.n === 1 ? "is" : "are"} ready for the payment list.</span>);
+  if (reading) parts.push(<span key="p"> {reading} {reading === 1 ? "is" : "are"} being read.</span>);
   if (waiting.n) parts.push(<span key="w"> {waiting.n} {waiting.n === 1 ? "is" : "are"} waiting for a vendor&apos;s correction.</span>);
   return (
     <p className="mt-2 mb-6 max-w-[62ch] text-[1.1875rem] leading-snug text-ink-2">
@@ -453,8 +455,9 @@ function HowItWorks() {
     <section aria-labelledby="how-h" className="rounded-md border border-rule bg-surface p-4 text-sm text-ink-2">
       <h2 id="how-h" className="text-base font-bold text-ink">How a decision is made</h2>
       <p className="mt-2">
-        The AI only reads the document. Code then checks every value against the PDF text, the vendor master and
-        the purchase order, and decides. Nothing reaches the payment list without a person approving it.
+        The reader (an AI model; the MOCK answer key on a test setup) only reads the document. Code then checks every
+        value against the PDF text, the vendor master and the purchase order, and decides. Nothing reaches the payment
+        list without a person approving it.
       </p>
       <p className="mt-3">
         Each invoice&apos;s routing slip shows the reading, the eight checks and the reviewer, in order:{" "}

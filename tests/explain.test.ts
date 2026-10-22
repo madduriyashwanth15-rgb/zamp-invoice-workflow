@@ -247,6 +247,14 @@ describe("single rules explained", () => {
     expect(d.actions.map((a) => a.action)).not.toContain("request_correction");
   });
 
+  it("a proforma the reader called 'other': the hold keeps the word and asks the vendor for the tax invoice", async () => {
+    const { send } = scripted();
+    const d = await send("pf.pdf", { ...extractionOf("S1"), doc_type: "other", document_title: "PROFORMA INVOICE" });
+    expect(d.blocking.map((c) => c.code)).toEqual(["CLASSIFICATION_CONFLICT"]);
+    expect(d.issues[0].explain).toBe('The MOCK reading read it as other, and its title or number label says "proforma": not a tax invoice.');
+    expect(d.correction_draft!.body).toContain('- The document is marked "proforma". Please send the tax invoice.');
+  });
+
   it("an AI line match rejected for size is one issue naming both sizes; the email asks about the line, not the AI", async () => {
     const proposer = new AnswerKeyProposer(() => ({ proposed_po_line: 1, pack_size_read: null, justification: "scripted: PO line 1" }));
     const { send } = scripted({ proposer });

@@ -42,7 +42,7 @@ describe("PDF reading limits (audit A08)", () => {
       const before = (await extractText(await getDocumentProxy(new Uint8Array(bytes)), { mergePages: true })).text.replace(/\u0000/g, "");
       const now = await readTextLayer(bytes, "application/pdf");
       expect(now.text, f).toBe(before);
-      expect(now.truncated, f).toBeUndefined();
+      expect(now.unreadable, f).toBeUndefined();
     }
   });
 
@@ -53,12 +53,16 @@ describe("PDF reading limits (audit A08)", () => {
     expect(Date.now() - t0).toBeLessThan(5_000);
   });
 
-  it(`text beyond ${MAX_TEXT_CHARS.toLocaleString("en")} characters is cut, so a text bomb cannot be stored`, async () => {
+  it(`text beyond ${MAX_TEXT_CHARS.toLocaleString("en")} characters is refused, not cut (wording past a cut would go unseen)`, async () => {
     const r = await readTextLayer(makePdf(3, 4_000), "application/pdf"); // about 360,000 characters
-    expect(r.unreadable).toBeUndefined();
-    expect(r.truncated).toBe(true);
-    expect(r.text.length).toBeLessThanOrEqual(MAX_TEXT_CHARS);
-    expect(r.has_text_layer).toBe(true);
+    expect(r.unreadable).toMatch(/more than 2,00,000 characters of text/);
+    expect(r.text).toBe("");
+  });
+
+  it("the time budget covers opening the file and loading each page, not only reading text", async () => {
+    let clock = 0;
+    const r = await readTextLayer(makePdf(1, 10), "application/pdf", () => (clock += PARSE_BUDGET_MS / 2));
+    expect(r.unreadable).toMatch(/took longer than/);
   });
 
   it(`work beyond ${PARSE_BUDGET_MS / 1000} s is stopped and the file refused`, async () => {
