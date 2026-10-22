@@ -5,7 +5,7 @@ import type { Extraction } from "@/domain/extraction-schema";
 import { TEST_DATA_DIR } from "@/fixtures/load";
 import { readTextLayer } from "@/server/pdf-text";
 import { codes, evalDirect, extractionOf, infos } from "./support/direct";
-import { tests } from "./support/harness";
+import { AnswerKeyProposer, tests } from "./support/harness";
 
 // Audit 23 Oct: an AI misreading must never end in CLEARED. Each case below reproduces an audit probe with the
 // real test PDF's text layer and a scripted (MOCK) reading; the code under test is the real rule engine.
@@ -91,5 +91,42 @@ describe("G1b (spec v1.4): read as an invoice, but the document says otherwise -
   it("a real quotation read as one (S9) is still skipped, not held", async () => {
     const r = await evalDirect(extractionOf("S9"), doc(await textOf("S9")));
     expect(r.outcome).toBe("SKIPPED");
+  });
+});
+
+describe("M3 (spec v1.4): an AI line match needs support the code can check, not only a matching unit (audit A04)", () => {
+  const proposeLine = (n: number) => new AnswerKeyProposer(() => ({ proposed_po_line: n, pack_size_read: null, justification: `scripted: PO line ${n}` }));
+  const withLine1 = (description: string): Extraction => {
+    const e = extractionOf("S1");
+    return { ...e, lines: e.lines.map((l) => (l.line_no === 1 ? { ...l, description } : l)) };
+  };
+
+  it("a 750 ml container proposed for the PO's 500 ml line is rejected: the sizes conflict", async () => {
+    const r = await evalDirect(withLine1("Food container 750 ml (round, PP)"), { proposer: proposeLine(1) });
+    expect(r.outcome).toBe("ON_HOLD");
+    expect(codes(r)).toEqual(["AI_PROPOSAL_REJECTED", "LINE_UNMAPPED"]);
+    expect(String(finding(r, "AI_PROPOSAL_REJECTED")!.evidence.reason)).toMatch(/750 ml.*500 ml|500 ml.*750 ml/);
+  });
+
+  it("a different item with the same unit (tiffin carrier for a food container) is rejected: nothing supports it", async () => {
+    const r = await evalDirect(withLine1("Stainless steel tiffin carrier 3-tier"), { proposer: proposeLine(1) });
+    expect(codes(r)).toEqual(["AI_PROPOSAL_REJECTED", "LINE_UNMAPPED"]);
+  });
+
+  it("the same item described differently, sharing words and no conflicting size, is accepted", async () => {
+    const r = await evalDirect(withLine1("Round food container, PP"), { proposer: proposeLine(1) });
+    expect(r.outcome).toBe("CLEARED");
+    expect(infos(r)).toContain("LINE_MAPPED_AI_VERIFIED");
+  });
+
+  it("words in common are not enough when only unit words match ('ml', 'pcs')", async () => {
+    const r = await evalDirect(withLine1("Cleaning liquid 500 ml"), { proposer: proposeLine(1) });
+    expect(codes(r)).toEqual(["AI_PROPOSAL_REJECTED", "LINE_UNMAPPED"]);
+  });
+
+  it("S14 (pack of 50, 500cc = 500 ml, catalog pack size printed and read) still clears", async () => {
+    const r = await evalDirect(extractionOf("S14"));
+    expect(r.outcome).toBe("CLEARED");
+    expect(infos(r)).toContain("LINE_MAPPED_AI_VERIFIED");
   });
 });

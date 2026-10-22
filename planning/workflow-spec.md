@@ -85,6 +85,7 @@ Normalised number: split on non-alphanumerics, uppercase, strip leading zeros fr
 - M1. Deterministic mapping: item code; or all significant normalised PO-description tokens present in the invoice line, with exactly one PO line satisfying this.
 - M2. AI proposal (fallback, P1) for lines M1 cannot map; proposal only.
 - M3. Code verifies every mapping: compatible units via catalog; printed pack size equals catalog; base quantity and price computed by code. Failure: AI_PROPOSAL_REJECTED (blocking) together with LINE_UNMAPPED or UOM_UNSUPPORTED (A5).
+- M3b (v1.4). An AI proposal is also accepted only with support the code can check on the invoice line: the PO line's item code is printed, or the catalog pack conversion is backed by a printed pack size that the AI read the same way, or the invoice and PO (or catalog) descriptions share an item word (not a number or unit word). A size printed on both lines that disagrees (750 ml against 500 ml; cc counts as ml, l as 1000 ml, kg as 1000 g) rejects the proposal in every case. Failure: AI_PROPOSAL_REJECTED with LINE_UNMAPPED.
 - M4. One PO line per invoice line and vice versa per invoice. A second invoice line mapping to an already-matched PO line: LINE_UNMAPPED, with evidence naming the earlier line (A5).
 - M5. Lump-sum (bundled) lines. Runs before M1-M4 for every line.
   - Detection uses explicit markers only: the phrase "lump sum" or "lumpsum" in the line's description or unit (case-insensitive, matched on normalised words, so "Lump-Sum" counts), or the unit code LS. The marker list is a setting.
@@ -242,7 +243,7 @@ Decided by the owner on 23 Oct 2026 (audit decisions Q1-Q11). Rows marked implem
 |---|---|---|---|
 | A printed bank account the reader leaves out is held: MISSING_REQUIRED_FIELD | K4b | Q2 | Implemented (section 4) |
 | Read as an invoice but worded as a quotation, proforma or challan: CLASSIFICATION_CONFLICT | G1b | Audit A03 | Implemented (section 4) |
-| AI line matches need code-checked support, not only a matching unit | M3 | Q3 | Pending |
+| AI line matches need code-checked support, not only a matching unit | M3b | Q3 | Implemented (section 7) |
 | An override counts PO use; the reviewer names the PO when none was found | C4, row 9 | Q1 | Pending |
 | Duplicate guard at override (same file or same number and vendor); no override of CREDIT_NOTE_UNSUPPORTED | P9, rows 9 and 14 | Q4 | Pending |
 | Random reply tokens; DMARC "gray" still auto-links | D2 | Q7 | Pending |

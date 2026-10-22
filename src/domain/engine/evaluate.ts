@@ -7,7 +7,7 @@ import { c1Compare, exceedsCap, paiseToRupees, roundToPaise, toPaise, type Paise
 import { normInvoiceNumber, normPoRef, normText } from "../normalise";
 import type { PoLine, PurchaseOrder, Vendor } from "../types";
 import { assessArithmetic } from "./arithmetic";
-import { m1Map, printedPackSize, verifyUnits } from "./mapping";
+import { m1Map, printedPackSize, proposalSupport, verifyUnits } from "./mapping";
 import {
   STAGE_LABELS, type ConsumptionEntry, type CorrectionLink, type DisputeLink, type EngineInput, type EngineResult,
   type EvidenceValue, type Finding, type Outcome, type PriorRun, type StageId, type StageResult,
@@ -448,11 +448,21 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
         t.add("UOM_UNSUPPORTED", `Line ${line.line_no}: unit conversion not verified (M3)`, { invoice_unit: line.uom, po_unit: target.uom }, line.line_no);
         continue;
       }
+      const support = proposalSupport(line, target, ref.catalog, u.via === "catalog pack" && printed === u.factor && proposal.pack_size_read === u.factor);
+      if (!support.ok) {
+        t.add("AI_PROPOSAL_REJECTED", `AI proposed PO line ${target.line_no}, but nothing on the invoice line supports it (M3, v1.4)`, {
+          proposal: proposal.justification, proposed_po_line: target.line_no, invoice_line: line.description, po_line: target.description, reason: support.reason,
+        }, line.line_no);
+        t.add("LINE_UNMAPPED", `Line ${line.line_no} "${line.description}" is not matched to ${po.po_number}: the AI proposal was rejected (M3)`, {
+          description: line.description, po: po.po_number,
+        }, line.line_no);
+        continue;
+      }
       poLine = target;
       factor = u.factor;
       via = `M2 proposal verified by code (${u.reason})`;
       t.add("LINE_MAPPED_AI_VERIFIED", `Line ${line.line_no} mapped to PO line ${target.line_no} by an AI proposal that code verified (M2-M3)`, {
-        proposal: proposal.justification, proposer: proposal.by ?? input.proposer.label, verification: u.reason,
+        proposal: proposal.justification, proposer: proposal.by ?? input.proposer.label, verification: `${u.reason}; ${support.reason}`,
       }, line.line_no);
     } else {
       t.add("LINE_UNMAPPED", `Line ${line.line_no} "${line.description}" matches no PO line (M1); no AI mapping available`, {
