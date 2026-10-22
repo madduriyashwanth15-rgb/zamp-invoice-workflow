@@ -3,7 +3,7 @@ import { REASON_CODES } from "@/domain/codes";
 import Decimal from "decimal.js";
 import type { Finding, LineMatch, ReferenceData, StageStatus } from "@/domain/engine/types";
 import { paiseToRupees } from "@/domain/money";
-import { availableActions, vendorCanFix, type ActionOption } from "@/domain/runs/queries";
+import { availableActions, sameInvoicePayable, vendorCanFix, type ActionOption } from "@/domain/runs/queries";
 import type { Approval, AuditEvent, CorrectionRequest, ExportRecord, Logs, RunRecord, StoreState, StoredDocument } from "@/domain/runs/types";
 import { nextToken } from "@/domain/runs/actions";
 import { formatDate, formatInr, formatTime } from "@/lib/format";
@@ -141,6 +141,8 @@ export interface RunDetail extends RunSummary {
   token_active: string | null;
   /** The holds in plain words with their figures, most severe first (audit U01). */
   issues: IssueView[];
+  /** Why an expected action is not offered (a cleared invoice that looks like a repeat of a payable one). */
+  notice: string | null;
   /** The action to lead with, or null when the next step is a person's judgement (audit U05). */
   recommended: Recommended | null;
   /** Invoice lines against the matched PO; null when no PO was matched or the run predates line matches. */
@@ -420,10 +422,18 @@ export function detail(run: RunRecord, state: Pick<StoreState, "runs" | "documen
     related: [...relatedIds].map((id) => state.runs.get(id)).filter((r): r is RunRecord => Boolean(r)).map((r) => summarize(r, ref)),
     token_active: run.state === "AWAITING_VENDOR" || run.state === "ON_HOLD" ? token : null,
     issues: issuesOf(ctx),
+    notice: clearedNotice(run, state),
     recommended: recommendedAction(run, actions),
     po_table: poTable(run, ref),
     correction_draft: run.state === "ON_HOLD" && vendorCanFix(run) ? { ...correctionDraft(run, nextToken(state, run), ref, ctx.holdNote), send: null } : null,
   };
+}
+
+function clearedNotice(run: RunRecord, state: Pick<StoreState, "runs" | "documents">): string | null {
+  if (run.state !== "CLEARED") return null;
+  const dup = sameInvoicePayable(run, state);
+  if (!dup) return null;
+  return `Approval is not offered: ${dup.other.ref} is already ${dup.other.state === "APPROVED" ? "approved" : "cleared"} for ${dup.why}. Put this one on hold, compare the two, and approve it with an exception only if both are due.`;
 }
 
 /** Everything the explanations need from the store, gathered once. */

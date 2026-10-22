@@ -156,8 +156,10 @@ export function approve(deps: Deps, runIds: string[], ctx: ActionCtx & { expecte
       if (run.export_blocked) throw new Refusal("INVALID_TRANSITION_BLOCKED", `${run.ref} is export-blocked (${run.export_block_reason})`);
       const other = chainHasOtherPayable(tx, run);
       if (other) throw new Refusal("INVALID_TRANSITION_BLOCKED", `CHAIN_INVARIANT: ${other.ref} is already ${other.state} for this invoice number`);
-      // Row 6: only a certain repeat is refused here; a likely one was already held by the engine (D3, unmatched vendor).
-      guardSameInvoice(tx, run, new Set(runIds));
+      // Row 6 has no second confirmation, so a likely repeat is refused too: put it on hold, then approve it with an
+      // exception, which names the other invoice and asks again.
+      const likely = guardSameInvoice(tx, run, new Set(runIds));
+      if (likely.length) throw new Refusal("INVALID_TRANSITION_BLOCKED", `${likely[0].replace(/\. Approve only if they are different invoices$/, "")}: put it on hold and approve it with an exception if both are due`);
       transition(tx, run, 6, "APPROVED", { actor: ctx.actor, at, details: { mode: batchId ? "batch" : "individual", batch_id: batchId } });
       recordApproval(tx, run, { approver_display_name: ctx.actor, approved_at: at, mode: batchId ? "batch" : "individual", batch_id: batchId, note: null }, deps.reference);
       return run;

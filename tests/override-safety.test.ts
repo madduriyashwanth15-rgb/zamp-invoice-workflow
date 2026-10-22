@@ -5,6 +5,7 @@ import { ingest, receiveUnreadable, type ExtractionAttempt, type Extractor, type
 import { availableActions } from "@/domain/runs/queries";
 import { approve, exportApproved, overrideApprove, processAsInvoice, requestCorrection } from "@/domain/runs/review";
 import { readTextLayer } from "@/server/pdf-text";
+import { detail } from "@/server/views";
 import { extractionOf, textFrom } from "./support/direct";
 import { AnswerKeyExtractor, called, deliver, makeDeps, reference } from "./support/harness";
 
@@ -235,6 +236,38 @@ describe("P9b when one copy was not matched to the vendor master (review 23 Oct)
     expect(ov).toMatchObject({ ok: false, code: "NEEDS_CONFIRMATION" });
     const x = await exportApproved(deps, DIVYA);
     expect(x.ok && x.value.record.run_ids).toEqual([twin.run_id]);
+  });
+
+  it("token-linked correction after a misread copy was approved: held, not cleared, so nothing is paid twice silently", async () => {
+    const { deps, send } = setup();
+    const original = await send("orig.pdf", { ...extractionOf("S1"), po_reference: "PO-1OO1" }); // PO typo: held
+    expect(original.state).toBe("ON_HOLD");
+    const sent = await requestCorrection(deps, original.run_id, { ...DIVYA, channel: "marked sent manually" });
+    expect(sent.ok).toBe(true);
+    const token = sent.ok ? sent.value.token : "";
+    const twin = await send("rescan.pdf", rescan(), { sha256: "rescan" });
+    expect((await overrideApprove(deps, twin.run_id, { ...DIVYA, note: "Checked by phone", ...called() })).ok).toBe(true);
+    const fixed = await send("fixed.pdf", { ...extractionOf("S1"), invoice_date: "2026-10-14" }, { token, sha256: "fixed" });
+    expect(fixed.state).toBe("ON_HOLD");
+    expect(fixed.blocking_codes).toEqual(["POSSIBLE_DOUBLE_BILLING"]);
+    const x = await exportApproved(deps, DIVYA);
+    expect(x.ok && x.value.record.run_ids).toEqual([twin.run_id]);
+  });
+
+  it("a cleared copy that only looks like a repeat (misread vendor) is not approved by a routine click", async () => {
+    const { deps, send } = setup();
+    const s1 = await send("s1.pdf", extractionOf("S1"), { sha256: "a" });
+    expect(s1.state).toBe("CLEARED");
+    const twin = await send("rescan.pdf", rescan(), { sha256: "b" });
+    const ov = await overrideApprove(deps, twin.run_id, { ...DIVYA, note: "Different invoice, checked", ...called(), confirmFailingChecks: true });
+    expect(ov.ok).toBe(true); // the reviewer was shown S1 and confirmed
+    const r = await approve(deps, [s1.run_id], DIVYA);
+    expect(r).toMatchObject({ ok: false, code: "INVALID_TRANSITION_BLOCKED" });
+    if (!r.ok) expect(r.reason).toMatch(/put it on hold and approve it with an exception if both are due$/);
+    const state = await deps.store.read((st) => ({ runs: st.runs, documents: st.documents, tokens: st.tokens }));
+    const d = detail((await deps.store.read((st) => st.runs.get(s1.run_id)))!, state, await deps.store.logs(s1.run_id), deps.reference);
+    expect(d.actions.map((a) => a.action)).toEqual(["manual_hold"]);
+    expect(d.notice).toMatch(/^Approval is not offered: .* already approved for invoice number FP-2026-0418 with the same total/);
   });
 
   it("an exact repeat (same vendor) is still refused outright, not just confirmed", async () => {

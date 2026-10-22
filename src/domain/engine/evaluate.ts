@@ -347,17 +347,17 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
       t.add("POSSIBLE_DOUBLE_BILLING", "Same invoice number as a rejected run, different content (D3, hold only)", {
         earlier_run: rejected.run_id, earlier_state: rejected.state,
       });
-    } else {
-      // P9b (v1.4): a payable copy whose vendor was not matched (a misread re-scan) has no chain, so D1-D3 cannot see
-      // it. The same number and total is held here, so this copy is explained and decided by a person, never cleared.
-      const unmatched = priorRuns.find((p) => PAYABLE.has(p.state) && p.vendor_id == null && p.invoice_number_norm === result.invoice_number_norm
-        && p.total_paise != null && p.total_paise === result.total_paise);
-      if (unmatched) {
-        t.add("POSSIBLE_DOUBLE_BILLING", "Same invoice number and total as a payable run whose vendor was not matched to the vendor master (D3, hold only)", {
-          earlier_run: unmatched.run_id, earlier_state: unmatched.state, earlier_exported: unmatched.exported, earlier_vendor_matched: false,
-          earlier_date: unmatched.invoice_date, earlier_total: r(unmatched.total_paise), this_date: ex.invoice_date, this_total: ex.total,
-        });
-      }
+    }
+    // P9b (v1.4): a payable copy whose vendor was not matched (a misread re-scan) has no chain, so D1-D3 cannot see
+    // it. The same number and total is held, whatever the chain found (a token-linked correction included), so this
+    // copy is explained and decided by a person, never cleared.
+    const unmatched = priorRuns.find((p) => PAYABLE.has(p.state) && p.vendor_id == null && p.invoice_number_norm === result.invoice_number_norm
+      && p.total_paise != null && p.total_paise === result.total_paise);
+    if (unmatched && !payable) {
+      t.add("POSSIBLE_DOUBLE_BILLING", "Same invoice number and total as a payable run whose vendor was not matched to the vendor master (D3, hold only)", {
+        earlier_run: unmatched.run_id, earlier_state: unmatched.state, earlier_exported: unmatched.exported, earlier_vendor_matched: false,
+        earlier_date: unmatched.invoice_date, earlier_total: r(unmatched.total_paise), this_date: ex.invoice_date, this_total: ex.total,
+      });
     }
     const sameVendorDateTotal = priorRuns.find((p) => p.vendor_id === vendor.vendor_id && p.chain_key !== chainKey
       && p.state !== "FAILED" && p.state !== "SKIPPED" && p.invoice_date === ex.invoice_date

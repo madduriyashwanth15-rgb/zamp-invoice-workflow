@@ -139,7 +139,7 @@ export function availableActions(run: RunRecord, s: Pick<StoreState, "runs"> & P
   const only = (code: string) => run.blocking_codes.length === 1 && run.blocking_codes[0] === code;
   switch (run.state) {
     case "CLEARED":
-      if (!run.export_blocked && !sameInvoicePayable(run, s)?.strict) out.push({ action: "approve", row: 6, needsNote: false });
+      if (!run.export_blocked && !sameInvoicePayable(run, s)) out.push({ action: "approve", row: 6, needsNote: false });
       out.push({ action: "manual_hold", row: 7, needsNote: true });
       break;
     case "ON_HOLD": {

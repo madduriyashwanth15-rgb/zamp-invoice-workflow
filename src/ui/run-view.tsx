@@ -143,6 +143,7 @@ function Decision({ run, onChanged }: { run: RunDetail; onChanged: () => void })
           {run.state === "CLEARED" ? "Cleared by checks" : run.state_label}
         </h2>
         <p className="mt-0.5">{stateSentence(run)}</p>
+        {run.notice && <p className="mt-2 font-semibold">{run.notice}</p>}
         {inFlight(run) && <div className="reading-bar mt-3 h-1 rounded bg-carbon-wash" aria-hidden />}
         {run.failure && run.state === "FAILED" && <p className="mt-2 text-sm">{run.failure}</p>}
       </div>
