@@ -95,21 +95,23 @@ const PAYABLE_STATES = new Set(["CLEARED", "APPROVED"]);
  * P9b (spec v1.4): the chain invariant also when the code could not build a chain (unknown vendor, failed reading).
  * Another CLEARED or APPROVED run is the same invoice when it has the same file, or the same invoice number and
  * either the same vendor (master id, or the printed name when unknown) or, when either run was not matched to the
- * vendor master, the same total: a re-scan whose vendor was misread must not be paid a second time.
+ * vendor master, the same total: a re-scan whose vendor was misread must not be paid a second time. Same file or
+ * same vendor is certain (strict: refused); the misread-vendor match is not (a second confirmation, naming the run).
  */
 export function sameInvoicePayable(
   run: RunRecord, s: Pick<StoreState, "runs"> & Partial<Pick<StoreState, "documents">>, exclude: Set<string> = new Set(),
-): { other: RunRecord; why: string } | undefined {
+): { other: RunRecord; why: string; strict: boolean } | undefined {
   const sha = s.documents?.get(run.run_id)?.sha256 ?? null;
   const number = run.extraction?.invoice_number ? normInvoiceNumber(run.extraction.invoice_number) : null;
   const vendorKey = (r: RunRecord) => r.vendor_id ?? (r.extraction?.vendor_name ? `name:${normText(r.extraction.vendor_name)}` : null);
   for (const r of s.runs.values()) {
     if (r.run_id === run.run_id || exclude.has(r.run_id) || !PAYABLE_STATES.has(r.state)) continue;
-    if (sha && s.documents?.get(r.run_id)?.sha256 === sha) return { other: r, why: "the same file" };
+    if (sha && s.documents?.get(r.run_id)?.sha256 === sha) return { other: r, why: "the same file", strict: true };
     if (!number || !r.extraction?.invoice_number || normInvoiceNumber(r.extraction.invoice_number) !== number) continue;
-    if (vendorKey(run) && vendorKey(r) === vendorKey(run)) return { other: r, why: `invoice number ${run.extraction!.invoice_number} from the same vendor` };
+    if (vendorKey(run) && vendorKey(r) === vendorKey(run)) return { other: r, why: `invoice number ${run.extraction!.invoice_number} from the same vendor`, strict: true };
     if ((!run.vendor_id || !r.vendor_id) && run.total_paise != null && run.total_paise === r.total_paise) {
-      return { other: r, why: `invoice number ${run.extraction!.invoice_number} with the same total (one of them is not matched to the vendor master)` };
+      // Not certain: two suppliers can both number an invoice "1". A person may approve it after a second confirmation.
+      return { other: r, why: `invoice number ${run.extraction!.invoice_number} with the same total (one of them is not matched to the vendor master)`, strict: false };
     }
   }
   return undefined;
@@ -129,7 +131,7 @@ export function availableActions(run: RunRecord, s: Pick<StoreState, "runs"> & P
   const out: ActionOption[] = [];
   // A known vendor with no open PO cannot be approved against one (C4b), so the override is not offered at all.
   const noOpenPo = poChoices(run, ref)?.length === 0;
-  const canOverride = overrideBlockedReason(run) === null && !noOpenPo && !sameInvoicePayable(run, s);
+  const canOverride = overrideBlockedReason(run) === null && !noOpenPo && !sameInvoicePayable(run, s)?.strict;
   const callback = callbackRequirement(run, ref);
   const override = (row: number): ActionOption => ({
     action: "override_approve", row, needsNote: true, ...(poChoices(run, ref) ? { po_choices: poChoices(run, ref) } : {}), ...(callback ? { callback } : {}),
@@ -137,7 +139,7 @@ export function availableActions(run: RunRecord, s: Pick<StoreState, "runs"> & P
   const only = (code: string) => run.blocking_codes.length === 1 && run.blocking_codes[0] === code;
   switch (run.state) {
     case "CLEARED":
-      if (!run.export_blocked && !sameInvoicePayable(run, s)) out.push({ action: "approve", row: 6, needsNote: false });
+      if (!run.export_blocked && !sameInvoicePayable(run, s)?.strict) out.push({ action: "approve", row: 6, needsNote: false });
       out.push({ action: "manual_hold", row: 7, needsNote: true });
       break;
     case "ON_HOLD": {

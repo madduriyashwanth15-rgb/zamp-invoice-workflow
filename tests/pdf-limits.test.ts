@@ -71,6 +71,23 @@ describe("PDF reading limits (audit A08)", () => {
     expect(r.unreadable).toMatch(/took longer than/);
   });
 
+  it("work abandoned at the time limit does not surface as an unhandled rejection", async () => {
+    const seen: unknown[] = [];
+    const onUnhandled = (e: unknown) => seen.push(e);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      for (const step of [PARSE_BUDGET_MS / 2, PARSE_BUDGET_MS, PARSE_BUDGET_MS * 2]) {
+        let clock = 0;
+        const r = await readTextLayer(makePdf(3, 20), "application/pdf", () => (clock += step));
+        expect(r.unreadable).toMatch(/took longer than/);
+      }
+      await new Promise((done) => setTimeout(done, 200)); // let any abandoned work settle
+      expect(seen).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
   it("a file that is not a PDF at all is refused, not thrown", async () => {
     const r = await readTextLayer(new TextEncoder().encode("<html>not a pdf</html>"), "application/pdf");
     expect(r.unreadable).toMatch(/could not be opened/);

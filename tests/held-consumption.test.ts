@@ -58,3 +58,26 @@ describe("held lines count on their PO line once approved", () => {
     expect(b.blocking_codes).toContain("UNAPPROVED_CHARGE"); // before the fix: CLEARED, ₹1,300 of delivery against ₹500 on the PO
   });
 });
+
+describe("the override re-check adds up one invoice's lines on the same PO line (review 23 Oct)", () => {
+  it("two lines of 1,200 containers on a 2,000 PO line: the override asks for a second confirmation", async () => {
+    const docs = new Map<string, Extraction>();
+    const deps: PipelineDeps = { ...makeDeps(), extractor: new Scripted(docs) };
+    const s1 = extractionOf("S1");
+    const half = { ...s1.lines[0], qty: "1200", amount: "7800.00" };
+    const e: Extraction = {
+      ...s1, invoice_number: "FP-2026-0600", lines: [{ ...half, line_no: 1 }, { ...half, line_no: 2 }],
+      subtotal: "15600.00", cgst: "1404.00", sgst: "1404.00", tax_total: "2808.00", total: "18408.00",
+    };
+    docs.set("dup.pdf", e);
+    const run = await ingest(deps, {
+      source: "email", sender_email: "billing@freshpack.example", uploader_display_name: null, provider_email_id: "p-dup", attachment_id: "a",
+      filename: "dup.pdf", content_type: "application/pdf", bytes: new Uint8Array([9]), subject: "Invoice", reply_token: null,
+      text_layer: textFrom(e), has_text_layer: true,
+    });
+    expect(run.blocking_codes).toContain("LINE_UNMAPPED"); // M4: the second line bills PO line 1 again
+    const r = await overrideApprove(deps, run.run_id, { actor: "Divya (AP)", note: "Two deliveries" });
+    expect(r).toMatchObject({ ok: false, code: "NEEDS_CONFIRMATION" });
+    if (!r.ok) expect((r.details!.problems as string[]).join(" ")).toMatch(/C2 PO-1001 line 1: 2400 would be billed against 2000 ordered/);
+  });
+});

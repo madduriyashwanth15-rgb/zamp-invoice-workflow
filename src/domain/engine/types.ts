@@ -72,6 +72,8 @@ export interface PriorRun {
   total_paise: Paise | null;
   exported: boolean;
   consumption: ConsumptionEntry[];
+  /** Normalised invoice number, also for runs with no chain (vendor not matched). */
+  invoice_number_norm?: string | null;
 }
 
 export interface DocumentInput {

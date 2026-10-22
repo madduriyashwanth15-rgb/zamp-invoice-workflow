@@ -80,6 +80,15 @@ function itemWords(text: string): Set<string> {
   return new Set([...significantTokens(text)].filter((t) => t.length >= 3 && !/^\d/.test(t) && !UNIT_WORDS.has(t)));
 }
 
+/**
+ * The word that names the item: the last item word before any parenthesis, comma or "for" ("Food container lid"
+ * -> lid, "Lid for food container" -> lid, "Round food container, PP" -> container).
+ */
+function headWord(description: string): string | null {
+  const phrase = description.replace(/\([^)]*\)/g, " ").split(",")[0].split(/\bfor\b/i)[0];
+  return [...itemWords(phrase)].at(-1) ?? null;
+}
+
 export interface ProposalSupport {
   ok: boolean;
   reason: string;
@@ -112,6 +121,9 @@ export function proposalSupport(
   const shared = [...itemWords(line.description)].filter((w) => itemWords(poText).has(w));
   const poWords = itemWords(target.description);
   if (shared.length >= 2 || (poWords.size === 1 && shared.some((w) => poWords.has(w)))) {
+    // ...and the word that names the invoice's item must be one of them: a "food container lid" is a lid.
+    const head = headWord(line.description);
+    if (head && !itemWords(poText).has(head)) return { ok: false, reason: `the invoice line names a ${head}, which the PO line does not` };
     return { ok: true, reason: `item words in common: ${shared.join(", ")}` };
   }
   if (shared.length === 1) return { ok: false, reason: `only one item word in common (${shared[0]}): not enough to show it is the same item` };

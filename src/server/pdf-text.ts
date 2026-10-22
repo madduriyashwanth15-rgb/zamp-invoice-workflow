@@ -34,6 +34,7 @@ class TimeUp extends Error {}
 
 /** `p`, or a TimeUp rejection once `ms` have passed (the timer is always cleared). */
 function within<T>(p: Promise<T>, ms: number): Promise<T> {
+  p.catch(() => undefined); // work abandoned at the time limit may still fail later (e.g. "Transport destroyed")
   if (ms <= 0) return Promise.reject(new TimeUp());
   let timer: ReturnType<typeof setTimeout> | undefined;
   const limit = new Promise<never>((_, reject) => {
@@ -51,8 +52,9 @@ export async function readTextLayer(bytes: Uint8Array, contentType: string, now:
   const tooSlow = (pages: number) => unreadable(pages, `reading the PDF's text took longer than ${PARSE_BUDGET_MS / 1000} s`);
   let pdf: Awaited<ReturnType<typeof getDocumentProxy>> | null = null;
   let pages = 0;
+  const opening = getDocumentProxy(new Uint8Array(bytes));
   try {
-    pdf = await within(getDocumentProxy(new Uint8Array(bytes)), left());
+    pdf = await within(opening, left());
     pages = pdf.numPages;
     if (pages > MAX_PAGES) return unreadable(pages, `the PDF has ${pages} pages; at most ${MAX_PAGES} are read`);
     const texts: string[] = [];
@@ -86,7 +88,11 @@ export async function readTextLayer(bytes: Uint8Array, contentType: string, now:
     const characters = text.replace(/\s/g, "").length;
     return { text, characters, has_text_layer: characters >= MIN_TEXT_LAYER_CHARS, pages };
   } catch (e) {
-    if (e instanceof TimeUp) return tooSlow(pages);
+    if (e instanceof TimeUp) {
+      // Opening ran out of time: destroy the document as soon as it finishes loading, so it does not linger.
+      if (!pdf) opening.then((p) => p.loadingTask.destroy()).catch(() => undefined);
+      return tooSlow(pages);
+    }
     return unreadable(0, `the PDF could not be opened (${e instanceof Error ? e.message : String(e)})`);
   } finally {
     await pdf?.loadingTask.destroy().catch(() => undefined);

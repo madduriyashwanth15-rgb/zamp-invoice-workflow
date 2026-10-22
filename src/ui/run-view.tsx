@@ -392,7 +392,7 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
 
       {confirm && (
         <div role="alert" className="mt-4 rounded-md border border-bad-edge bg-bad-bg p-3 text-bad-fg">
-          <p className="font-semibold">{confirm.kind === "callback" ? `${confirm.reason.replace(/\. Confirm again to approve$/, "")}. Approve only if the call settled this:` : "Approving this would bill more than the purchase order allows:"}</p>
+          <p className="font-semibold">{confirm.kind === "callback" ? `${confirm.reason.replace(/\. Confirm again to approve$/, "")}. Approve only if the call settled this:` : "Approving this goes past these checks:"}</p>
           <ul className="mt-1 list-disc pl-5 text-sm">
             {confirm.problems.map((p) => (
               <li key={p}>{p}</li>

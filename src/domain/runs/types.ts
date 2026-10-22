@@ -153,7 +153,7 @@ export interface Logs {
 export function toPriorRun(r: RunRecord): PriorRun {
   return {
     run_id: r.run_id, state: r.state, vendor_id: r.vendor_id, chain_key: r.chain_key, invoice_date: r.invoice_date,
-    total_paise: r.total_paise, exported: r.exported, consumption: r.consumption,
+    total_paise: r.total_paise, exported: r.exported, consumption: r.consumption, invoice_number_norm: r.invoice_number_norm,
   };
 }
 

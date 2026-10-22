@@ -10,6 +10,7 @@ import { callbackRequirement, overrideBlockedReason, poChoices, sameInvoicePayab
 import { pushEvent, transition, TransitionRefused } from "./state-machine";
 import type { Approval, CallbackRecord, ExportRecord, RunRecord, StoreState } from "./types";
 
+const CONFIRM_CHECKS = "Approving this goes past these checks; confirm again to approve anyway";
 const NOTHING_FOR_VENDOR = "Nothing on this invoice is for the vendor to correct: these holds are checks on our side (for a changed bank account, call the vendor on the master number)";
 
 // Reviewer actions (spec 11-13). Every action needs a demo display name (U1, T13); every refusal is logged
@@ -85,9 +86,13 @@ function chainHasOtherPayable(tx: StoreState, run: RunRecord): RunRecord | undef
   return [...tx.runs.values()].find((r) => r.run_id !== run.run_id && r.chain_key === run.chain_key && PAYABLE.has(r.state));
 }
 
-function guardSameInvoice(tx: StoreState, run: RunRecord, exclude?: Set<string>) {
+/** P9b: refuses a certain repeat of a payable invoice; returns the warning for a likely one (confirmed by a person). */
+function guardSameInvoice(tx: StoreState, run: RunRecord, exclude?: Set<string>): string[] {
   const dup = sameInvoicePayable(run, tx, exclude);
-  if (dup) throw new Refusal("INVALID_TRANSITION_BLOCKED", `POSSIBLE_DOUBLE_BILLING: ${dup.other.ref} is already ${dup.other.state} for ${dup.why}`);
+  if (!dup) return [];
+  const text = `POSSIBLE_DOUBLE_BILLING: ${dup.other.ref} is already ${dup.other.state} for ${dup.why}`;
+  if (dup.strict) throw new Refusal("INVALID_TRANSITION_BLOCKED", text);
+  return [`${text}. Approve only if they are different invoices`];
 }
 
 /**
@@ -120,14 +125,19 @@ export function recheckConsumption(tx: StoreState, run: RunRecord, ref: Referenc
         otherQty.set(c.line_no, (otherQty.get(c.line_no) ?? new Decimal(0)).plus(c.base_qty));
       }
     }
+    // This run's own entries are added up per PO line first: one invoice can bill the same PO line twice (M4).
     let mine = 0n;
+    const myQty = new Map<number, Decimal>();
     for (const c of run.consumption.filter((x) => x.po_number === poNumber)) {
       mine += c.amount_paise;
-      const pl = po.lines.find((l) => l.line_no === c.line_no);
-      if (!pl) continue; // line 0: PO-level amount of a lump-sum line, no quantity to check
+      myQty.set(c.line_no, (myQty.get(c.line_no) ?? new Decimal(0)).plus(c.base_qty));
+    }
+    for (const [lineNo, qty] of myQty) {
+      const pl = po.lines.find((l) => l.line_no === lineNo);
+      if (!pl) continue; // line 0: PO-level amount (lump sum or unverified line), no quantity to check
       const cap = new Decimal(pl.qty_ordered).mul(new Decimal(100).plus(s.quantity_tolerance_pct)).div(100);
-      const total = new Decimal(c.base_qty).plus(otherQty.get(c.line_no) ?? 0);
-      if (total.gt(cap)) problems.push(`C2 ${poNumber} line ${c.line_no}: ${total} would be billed against ${pl.qty_ordered} ordered`);
+      const total = qty.plus(otherQty.get(lineNo) ?? 0);
+      if (total.gt(cap)) problems.push(`C2 ${poNumber} line ${lineNo}: ${total} would be billed against ${pl.qty_ordered} ordered`);
     }
     if (exceedsCap(mine + others, po.subtotal_pretax, s.price_tolerance_pct)) {
       problems.push(`C3 ${poNumber}: ${paiseToRupees(mine + others)} would be billed against ${paiseToRupees(po.subtotal_pretax)} (+${s.price_tolerance_pct}%)`);
@@ -146,6 +156,7 @@ export function approve(deps: Deps, runIds: string[], ctx: ActionCtx & { expecte
       if (run.export_blocked) throw new Refusal("INVALID_TRANSITION_BLOCKED", `${run.ref} is export-blocked (${run.export_block_reason})`);
       const other = chainHasOtherPayable(tx, run);
       if (other) throw new Refusal("INVALID_TRANSITION_BLOCKED", `CHAIN_INVARIANT: ${other.ref} is already ${other.state} for this invoice number`);
+      // Row 6: only a certain repeat is refused here; a likely one was already held by the engine (D3, unmatched vendor).
       guardSameInvoice(tx, run, new Set(runIds));
       transition(tx, run, 6, "APPROVED", { actor: ctx.actor, at, details: { mode: batchId ? "batch" : "individual", batch_id: batchId } });
       recordApproval(tx, run, { approver_display_name: ctx.actor, approved_at: at, mode: batchId ? "batch" : "individual", batch_id: batchId, note: null }, deps.reference);
@@ -213,7 +224,7 @@ export function overrideApprove(
     }
     const other = chainHasOtherPayable(tx, run);
     if (other) throw new Refusal("INVALID_TRANSITION_BLOCKED", `CHAIN_INVARIANT: ${other.ref} is already ${other.state} for this invoice number`);
-    guardSameInvoice(tx, run);
+    const likelyRepeat = guardSameInvoice(tx, run);
     const callback = checkCallback(run, deps.reference, deps.now(), ctx);
     // C4b: no PO was found for a known vendor, so the reviewer names the PO this invoice belongs to and it is counted.
     const choices = poChoices(run, deps.reference);
@@ -231,9 +242,9 @@ export function overrideApprove(
       run.po_number = po.po_number;
       run.consumption = consumptionAgainst(run.extraction, po, deps.reference.catalog);
     }
-    const problems = recheckConsumption(tx, run, deps.reference);
+    const problems = [...likelyRepeat, ...recheckConsumption(tx, run, deps.reference)];
     if (problems.length && !ctx.confirmFailingChecks) {
-      throw new Refusal("NEEDS_CONFIRMATION", "Approving this would exceed the PO; confirm again to approve anyway", { problems });
+      throw new Refusal("NEEDS_CONFIRMATION", CONFIRM_CHECKS, { problems });
     }
     const at = deps.now();
     const row = run.state === "AWAITING_VENDOR" ? 14 : 9;
@@ -357,10 +368,10 @@ export function confirmCorrectionLink(deps: Deps, candidateId: string, ctx: Acti
     }
     const other = chainHasOtherPayable(tx, cand);
     if (other) throw new Refusal("INVALID_TRANSITION_BLOCKED", `CHAIN_INVARIANT: ${other.ref} is already ${other.state}`);
-    guardSameInvoice(tx, cand, new Set(cand.supersedes_run_ids));
-    const problems = recheckConsumption(tx, cand, deps.reference);
+    const likely = guardSameInvoice(tx, cand, new Set(cand.supersedes_run_ids));
+    const problems = [...likely, ...recheckConsumption(tx, cand, deps.reference)];
     if (problems.length && !ctx.confirmFailingChecks) {
-      throw new Refusal("NEEDS_CONFIRMATION", "Approving this would exceed the PO; confirm again to approve anyway", { problems });
+      throw new Refusal("NEEDS_CONFIRMATION", CONFIRM_CHECKS, { problems });
     }
     transition(tx, cand, 9, "APPROVED", { actor: ctx.actor, at, note: ctx.note, details: { mode: "link-confirmation", supersedes: cand.supersedes_run_ids, c2c3: problems, confirmed: Boolean(ctx.confirmFailingChecks) } });
     recordApproval(tx, cand, { approver_display_name: ctx.actor, approved_at: at, mode: "link-confirmation", batch_id: null, note: ctx.note ?? null }, deps.reference);
@@ -387,10 +398,10 @@ export function replaceApproved(deps: Deps, candidateId: string, ctx: ActionCtx 
     original.export_blocked = false;
     original.export_block_reason = null;
     cand.supersedes_run_ids.push(original.run_id);
-    guardSameInvoice(tx, cand, new Set(cand.supersedes_run_ids));
-    const problems = recheckConsumption(tx, cand, deps.reference);
+    const likely = guardSameInvoice(tx, cand, new Set(cand.supersedes_run_ids));
+    const problems = [...likely, ...recheckConsumption(tx, cand, deps.reference)];
     if (problems.length && !ctx.confirmFailingChecks) {
-      throw new Refusal("NEEDS_CONFIRMATION", "Approving this would exceed the PO; confirm again to approve anyway", { problems });
+      throw new Refusal("NEEDS_CONFIRMATION", CONFIRM_CHECKS, { problems });
     }
     transition(tx, cand, 9, "APPROVED", { actor: ctx.actor, at, note: ctx.note, details: { mode: "replacement", replaces: original.run_id, c2c3: problems, confirmed: Boolean(ctx.confirmFailingChecks) } });
     recordApproval(tx, cand, { approver_display_name: ctx.actor, approved_at: at, mode: "replacement", batch_id: null, note: ctx.note ?? null }, deps.reference);

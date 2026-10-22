@@ -169,10 +169,17 @@ describe("K4b also when the reader returns an account with no digits (review 23 
     expect(infos(r)).not.toContain("BANK_NOT_SHOWN");
   });
 
-  it("a value with no digits and no bank wording on the page still holds: the reader saw something", async () => {
+  it("a masked value with no bank wording on the page still holds: the reader saw an account", async () => {
     const text = (await textOf("S1")).split("\n").filter((l) => !BANK_WORDING.test(l)).join("\n");
-    const r = await evalDirect({ ...extractionOf("S1"), bank_account_last4: null, bank_account_number: "N/A" }, doc(text));
-    expect(finding(r, "MISSING_REQUIRED_FIELD")!.evidence.printed_wording).toBe('read as "N/A"');
+    const r = await evalDirect({ ...extractionOf("S1"), bank_account_last4: null, bank_account_number: "XXXX XXXX" }, doc(text));
+    expect(finding(r, "MISSING_REQUIRED_FIELD")!.evidence.printed_wording).toBe('read as "XXXX XXXX"');
+  });
+
+  it.each(["N/A", "Axis Bank"])('"%s" with no bank wording on the page is no account: info BANK_NOT_SHOWN, and S1 clears', async (v) => {
+    const text = (await textOf("S1")).split("\n").filter((l) => !BANK_WORDING.test(l)).join("\n");
+    const r = await evalDirect({ ...extractionOf("S1"), bank_account_last4: null, bank_account_number: v }, doc(text));
+    expect(r.outcome).toBe("CLEARED");
+    expect(infos(r)).toContain("BANK_NOT_SHOWN");
   });
 
   it.each(["Acct No: 50200012340042", "Bank Account: 50200012340042", "Account # 50200012340042"])("bank wording %s is recognised", (w) => {
@@ -190,12 +197,14 @@ describe("M3b: one shared word is not enough (review 23 Oct)", () => {
     const e = extractionOf("S1");
     return { ...e, lines: e.lines.map((l) => (l.line_no === 1 ? { ...l, description } : l)) };
   };
-  it.each(["Container lid 500 ml", "Food tray (round, PP)", "Paper food box"])("%s proposed for the food container is rejected", async (d) => {
+  // "Food container lid 500 ml" never reaches the AI: the deterministic M1 match accepts a description holding every
+  // word of the PO line. That is the spec's M1 rule, unchanged tonight; it is listed as an open point for the owner.
+  it.each(["Container lid 500 ml", "Food tray (round, PP)", "Paper food box", "Lid for food container"])("%s proposed for the food container is rejected", async (d) => {
     const r = await evalDirect(withLine1(d), { proposer: proposeLine(1) });
     expect(codes(r)).toEqual(["AI_PROPOSAL_REJECTED", "LINE_UNMAPPED"]);
   });
-  it("two item words in common (food, container) still match", async () => {
-    const r = await evalDirect(withLine1("Container for food, round"), { proposer: proposeLine(1) });
+  it.each(["Container for food, round", "Round food container, PP"])("%s (two item words in common, naming a container) still matches", async (d) => {
+    const r = await evalDirect(withLine1(d), { proposer: proposeLine(1) });
     expect(r.outcome).toBe("CLEARED");
   });
 });
