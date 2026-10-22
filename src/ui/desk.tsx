@@ -27,7 +27,8 @@ const FILTERS: { id: FilterId; label: string; hint: string; test: (r: RunSummary
 const busy = (l: Listing | null) => Boolean(l?.runs.some((r) => r.state === "RECEIVED" || r.state === "PROCESSING"));
 
 export function Desk() {
-  const { data, error, loading, refresh } = usePoll(api.list, (d) => (busy(d) ? 2000 : 15000));
+  // Idle: every 5 s, so an emailed invoice shows up quickly; while anything is being read: every 2 s.
+  const { data, error, loading, refresh } = usePoll(api.list, (d) => (busy(d) ? 2000 : 5000));
   const [filter, setFilter] = useState<FilterId>("review");
   const runs = useMemo(() => data?.runs ?? [], [data]);
   const shown = runs.filter(FILTERS.find((f) => f.id === filter)!.test);

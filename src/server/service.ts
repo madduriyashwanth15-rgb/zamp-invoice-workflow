@@ -7,6 +7,7 @@ import {
 } from "@/domain/runs/review";
 import type { ReviewAction } from "@/domain/runs/queries";
 import { paiseToRupees } from "@/domain/money";
+import { sendCorrection, type SendFailure } from "@/server/correction-email";
 import { readTextLayer } from "@/server/pdf-text";
 import { runtime } from "@/server/runtime";
 import { detail, summarize, type RunDetail, type RunSummary } from "@/server/views";
@@ -29,11 +30,13 @@ export async function listRuns(): Promise<{ runs: RunSummary[]; exports: { expor
 }
 
 export async function getRun(runId: string): Promise<RunDetail | null> {
-  const { deps } = runtime();
+  const { deps, mail } = runtime();
   const state = await deps.store.read((s) => ({ run: s.runs.get(runId), runs: s.runs, documents: s.documents, tokens: s.tokens }));
   if (!state.run) return null;
   const logs = await deps.store.logs(runId);
-  return detail(state.run, state, logs, deps.reference);
+  const d = detail(state.run, state, logs, deps.reference);
+  if (d.correction_draft && mail) d.correction_draft.send = { from: mail.sender.from, reply_to: mail.replyTo };
+  return d;
 }
 
 export async function documentFile(runId: string): Promise<{ bytes: Uint8Array; content_type: string; filename: string } | null> {
@@ -78,16 +81,18 @@ export interface ActionBody {
   channel?: "sent" | "marked sent manually";
 }
 
-export async function act(runId: string, body: ActionBody): Promise<ActionResult<unknown>> {
-  const { deps } = runtime();
+export async function act(runId: string, body: ActionBody): Promise<ActionResult<unknown> | SendFailure> {
+  const { deps, mail } = runtime();
   const ctx = { actor: body.actor, note: body.note ?? null, expectedVersion: body.expectedVersion };
   switch (body.action) {
     case "approve": return approve(deps, [runId], ctx);
     case "manual_hold": return manualHold(deps, runId, ctx);
     case "override_approve": return overrideApprove(deps, runId, { ...ctx, confirmFailingChecks: body.confirmFailingChecks });
     case "reject": return reject(deps, runId, ctx);
-    // Sending is not wired up yet, so the only honest channel is "marked sent manually".
-    case "request_correction": return requestCorrection(deps, runId, { ...ctx, channel: "marked sent manually" });
+    case "request_correction":
+      if (body.channel !== "sent") return requestCorrection(deps, runId, { ...ctx, channel: "marked sent manually" });
+      if (!mail) return { ok: false, code: "EMAIL_NOT_SENT", reason: "Sending is not set up on this deployment (RESEND_API_KEY and AP_INBOX_ADDRESS). Copy the text and mark it sent manually." };
+      return sendCorrection(deps, runId, ctx, mail);
     case "stop_waiting": return stopWaiting(deps, runId, ctx);
     case "confirm_link": return confirmCorrectionLink(deps, runId, { ...ctx, confirmFailingChecks: body.confirmFailingChecks });
     case "replace_approved": return replaceApproved(deps, runId, { ...ctx, confirmFailingChecks: body.confirmFailingChecks });

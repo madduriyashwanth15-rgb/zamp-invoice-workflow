@@ -35,6 +35,17 @@ export function scenarios() {
   return key.tests.map((t) => ({ test_id: t.test_id, title: SCENARIOS[t.test_id] ?? t.test_id, file: path.basename(t.file as string), sender: t.sender as string, needs_token_of: (t.reply_token_of as string | null) ?? null }));
 }
 
+/** The attachment of a recorded test email, for download (only known test ids; no path from the request is used). */
+export function sampleFile(testId: string): { bytes: Uint8Array; filename: string; content_type: string } | null {
+  if (!loadAnswerKey().tests.some((t) => t.test_id === testId)) return null;
+  const email = JSON.parse(readFileSync(path.join(TEST_DATA_DIR, "emails", `${testId}.json`), "utf-8")) as {
+    attachments: { filename: string; path: string; content_type: string }[];
+  };
+  const att = email.attachments[0];
+  if (!att) return null;
+  return { bytes: new Uint8Array(readFileSync(path.join(TEST_DATA_DIR, att.path))), filename: att.filename, content_type: att.content_type };
+}
+
 /** Replays one recorded email. A reply that must carry our token gets the token actually issued in this app. */
 export async function replay(testId: string): Promise<EmailIntakeResult> {
   const { deps } = runtime();

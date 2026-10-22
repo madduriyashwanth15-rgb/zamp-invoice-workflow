@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { errorText } from "./api";
+import { api, errorText } from "./api";
 import { useIdentity } from "./identity";
 
 type Scenario = { test_id: string; title: string; file: string; sender: string; needs_token_of: string | null };
@@ -14,6 +14,11 @@ export function DemoTools() {
   const [result, setResult] = useState<Record<string, { ok: boolean; text: string; runId?: string }>>({});
   const [confirm, setConfirm] = useState("");
   const [resetMsg, setResetMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [inbox, setInbox] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.status().then((i) => setInbox(i.correctionEmail.mode === "send" ? i.correctionEmail.reply_to : null), () => setInbox(null));
+  }, []);
 
   useEffect(() => {
     fetch("/api/demo/replay", { cache: "no-store" })
@@ -51,6 +56,18 @@ export function DemoTools() {
             The email provider is simulated; the intake, reading, checks and decision are the real ones. Replies to a
             correction carry the reference this app actually issued.
           </p>
+          <p className="mt-2 max-w-3xl text-sm text-ink-2">
+            To try real email instead, download a sample invoice and email it as an attachment
+            {inbox ? (
+              <>
+                {" "}to <span className="font-semibold text-ink">{inbox}</span>
+              </>
+            ) : (
+              " to the AP inbox"
+            )}
+            . From an address that is not registered for that vendor it is held as an unverified sender, which is the
+            intended check.
+          </p>
         </div>
         {loadError && <p className="px-4 py-6 text-bad-fg">{loadError}</p>}
         {!list && !loadError && <p className="px-4 py-6 text-ink-2">Loading the recorded emails</p>}
@@ -83,6 +100,13 @@ export function DemoTools() {
                         )}
                       </span>
                     )}
+                    <a
+                      href={`/api/demo/file/${encodeURIComponent(s.test_id)}`}
+                      download
+                      className="text-sm font-semibold text-carbon-deep underline underline-offset-2"
+                    >
+                      Download PDF<span className="sr-only"> for {s.test_id}</span>
+                    </a>
                     <button type="button" onClick={() => send(s)} className="rounded-md border border-rule-strong px-3 py-1.5 text-sm font-semibold hover:bg-paper">
                       Send
                     </button>

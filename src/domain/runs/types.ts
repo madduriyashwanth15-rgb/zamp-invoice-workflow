@@ -71,6 +71,9 @@ export interface CorrectionRequest {
   token: string;
   sent_at: string;
   channel: "sent" | "marked sent manually";
+  /** Where the email went and the provider's message id, when the app sent it itself. */
+  to?: string | null;
+  provider_message_id?: string | null;
 }
 
 export type EventType =

@@ -9,8 +9,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
-    exclude: ["tests/live/**", "node_modules/**"],
+    exclude: ["tests/live/**", "tests/live-golden/**", "node_modules/**"],
     env: localEnv(".env.test.local"),
     hookTimeout: 60_000,
+    testTimeout: 30_000, // a golden run is about 1-3 s on a laptop; the default 5 s left no margin
   },
 });

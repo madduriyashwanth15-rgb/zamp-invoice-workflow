@@ -149,7 +149,10 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
 
   if (ex.total != null && ex.lines.length > 0) {
     const a = assessArithmetic(ex, roundTol);
-    if (a.status === "consistent") t.note(`V2: arithmetic consistent on the ${a.used_basis} basis (within Rs ${s.rounding_tolerance_inr})`);
+    if (a.status === "consistent") {
+      const basis = a.used_basis === "none" ? "with no GST" : `on the ${a.used_basis} basis`;
+      t.note(`V2: arithmetic consistent ${basis} (within Rs ${s.rounding_tolerance_inr})`);
+    }
     else if (a.status === "basis_unclear") {
       t.add("TAX_BASIS_UNCLEAR", `Price basis unclear: ${a.reason} (T3)`, {
         stated_basis: a.stated_basis, consistent_bases: a.consistent_bases,

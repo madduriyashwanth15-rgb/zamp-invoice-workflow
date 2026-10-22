@@ -1,4 +1,5 @@
 import type { ActionFailure } from "@/domain/runs/review";
+import type { SendFailure } from "@/server/correction-email";
 
 // Small helpers for route handlers: consistent JSON shapes and status codes.
 
@@ -6,8 +7,8 @@ export function json(data: unknown, status = 200): Response {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-export function refused(f: ActionFailure): Response {
-  const status = f.code === "IDENTITY_REQUIRED" ? 400 : 409;
+export function refused(f: ActionFailure | SendFailure): Response {
+  const status = f.code === "IDENTITY_REQUIRED" ? 400 : f.code === "EMAIL_NOT_SENT" ? 502 : 409;
   return json(f, status);
 }
 

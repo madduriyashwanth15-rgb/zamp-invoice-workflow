@@ -6,7 +6,7 @@ import { extractionSchema, type Extraction } from "@/domain/extraction-schema";
 import { parseReplyToken, triageEmail } from "@/domain/intake/inbound-email";
 import { markCorrectionSent } from "@/domain/runs/actions";
 import { MemoryRunStore } from "@/domain/runs/memory-store";
-import { ingest, type PipelineDeps } from "@/domain/runs/pipeline";
+import { ingest, type Extractor, type PipelineDeps } from "@/domain/runs/pipeline";
 import type { RunRecord, RunStore } from "@/domain/runs/types";
 import { loadAnswerKey, loadEmail, loadReferenceData, TEST_DATA_DIR, type AnswerKeyTest } from "@/fixtures/load";
 import { AnswerKeyExtractor, AnswerKeyProposer } from "@/server/extractor/answer-key-extractor";
@@ -35,6 +35,8 @@ export interface HarnessOptions {
   /** Store for each fresh "database" (default: in-memory, or Postgres with TEST_STORE=pg). */
   storeFactory?: () => RunStore;
   proposer?: MappingProposer | null;
+  /** Default: the MOCK answer-key extractor. The live golden run passes the real Gemini extractor. */
+  extractor?: Extractor;
   emailOverride?: (testId: string, email: ReturnType<typeof loadEmail>) => ReturnType<typeof loadEmail>;
 }
 
@@ -48,7 +50,7 @@ export function makeDeps(opts: HarnessOptions = {}): PipelineDeps {
     now: () => new Date((clock += 1000)).toISOString(),
     newId: () => `run-${String(++n).padStart(3, "0")}`,
     newRef: () => `T${String(n).padStart(4, "0")}`,
-    extractor: new AnswerKeyExtractor(reference, opts.mutate),
+    extractor: opts.extractor ?? new AnswerKeyExtractor(reference, opts.mutate),
     proposer: opts.proposer === undefined ? new AnswerKeyProposer() : opts.proposer,
   };
 }

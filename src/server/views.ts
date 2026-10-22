@@ -82,7 +82,14 @@ export interface RunDetail extends RunSummary {
   related: RunSummary[];
   token_active: string | null;
   /** Correction email built by code from the run's own facts (spec 13); null when no correction can be requested. */
-  correction_draft: { to: string | null; subject: string; body: string; token: string } | null;
+  correction_draft: {
+    to: string | null;
+    subject: string;
+    body: string;
+    token: string;
+    /** Set when the app can send the email itself (Resend configured); otherwise only "mark sent manually". */
+    send: { from: string; reply_to: string } | null;
+  } | null;
 }
 
 const codeView = (code: ReasonCode): CodeView => ({
@@ -205,12 +212,12 @@ export function detail(run: RunRecord, state: Pick<StoreState, "runs" | "documen
     approvals: logs.approvals, corrections: logs.corrections, exports: logs.exports, events: logs.events,
     related: [...relatedIds].map((id) => state.runs.get(id)).filter((r): r is RunRecord => Boolean(r)).map((r) => summarize(r, ref)),
     token_active: run.state === "AWAITING_VENDOR" || run.state === "ON_HOLD" ? token : null,
-    correction_draft: run.state === "ON_HOLD" ? correctionDraft(run, state, ref) : null,
+    correction_draft: run.state === "ON_HOLD" ? { ...correctionDraft(run, nextToken(state, run), ref), send: null } : null,
   };
 }
 
-function correctionDraft(run: RunRecord, state: Pick<StoreState, "tokens">, ref: ReferenceData): RunDetail["correction_draft"] {
-  const token = nextToken(state, run);
+/** The correction email, written by code from the run's own findings (spec 13). No AI wording. */
+export function correctionDraft(run: RunRecord, token: string, ref: ReferenceData): { to: string | null; subject: string; body: string; token: string } {
   const vendor = run.vendor_id ? ref.vendors.find((v) => v.vendor_id === run.vendor_id) : undefined;
   const number = run.extraction?.invoice_number ?? "(no number)";
   const reasons = (run.engine?.blocking ?? []).map((f) => `- ${f.message}`);

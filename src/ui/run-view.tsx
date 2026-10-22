@@ -161,13 +161,13 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
   if (!run.actions.length) return null;
   const current = run.actions.find((a) => a.action === open) ?? null;
 
-  async function submit(action: ReviewAction, extra: Record<string, unknown> = {}) {
+  async function submit(action: ReviewAction, extra: Record<string, unknown> = {}, doneText?: string) {
     if (!name) return setMsg({ ok: false, text: "Choose who you are acting as (top right) first." });
     setPending(true);
     setMsg(null);
     try {
       await api.act(run.run_id, { action, actor: name, note: note.trim() || null, expectedVersion: run.version, ...extra });
-      setMsg({ ok: true, text: `${ACTION_TEXT[action].done}.` });
+      setMsg({ ok: true, text: doneText ?? `${ACTION_TEXT[action].done}.` });
       setOpen(null);
       setNote("");
       setConfirm(null);
@@ -212,14 +212,39 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
 
       {current && current.action === "request_correction" && run.correction_draft && (
         <div className="mt-4 rounded-md border border-rule bg-surface p-3 text-ink">
-          <p className="text-sm text-ink-2">
-            Email sending is not connected in this demo. Copy this text into your email to{" "}
-            <span className="font-semibold text-ink">{run.correction_draft.to ?? "the vendor"}</span>, send it, then mark it as sent. The
-            reference {run.correction_draft.token} is issued when you do.
-          </p>
+          {run.correction_draft.send && run.correction_draft.to ? (
+            <p className="text-sm text-ink-2">
+              Written by code from the findings above. <span className="font-semibold text-ink">Send email</span> delivers it to{" "}
+              <span className="font-semibold text-ink">{run.correction_draft.to}</span> from {run.correction_draft.send.from}. The
+              vendor&apos;s reply goes to {run.correction_draft.send.reply_to}, where the reference {run.correction_draft.token} links
+              it to this invoice.
+            </p>
+          ) : (
+            <p className="text-sm text-ink-2">
+              Email sending is not connected on this deployment. Copy this text into your email to{" "}
+              <span className="font-semibold text-ink">{run.correction_draft.to ?? "the vendor"}</span>, send it, then mark it as sent. The
+              reference {run.correction_draft.token} is issued when you do.
+            </p>
+          )}
           <p className="mt-3 text-sm font-semibold">Subject: {run.correction_draft.subject}</p>
           <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded border border-rule bg-paper p-3 font-sans text-sm">{run.correction_draft.body}</pre>
           <div className="mt-3 flex flex-wrap gap-2">
+            {run.correction_draft.send && run.correction_draft.to && (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  submit(
+                    "request_correction",
+                    { channel: "sent" },
+                    `Correction email sent to ${run.correction_draft!.to} with reference ${run.correction_draft!.token}.`,
+                  )
+                }
+                className="rounded-md bg-carbon px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {pending ? "Sending" : "Send email"}
+              </button>
+            )}
             <button
               type="button"
               onClick={async () => {
@@ -239,7 +264,11 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
               type="button"
               disabled={pending}
               onClick={() => submit("request_correction", { channel: "marked sent manually" })}
-              className="rounded-md bg-carbon px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+              className={
+                run.correction_draft.send && run.correction_draft.to
+                  ? "rounded-md border border-rule-strong px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
+                  : "rounded-md bg-carbon px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+              }
             >
               Mark as sent manually
             </button>
@@ -557,7 +586,7 @@ function eventText(e: RunDetail["events"][number]): string {
     case "DECIDED":
       return `Decided ${d.outcome}${Array.isArray(d.blocking) && d.blocking.length ? `: ${(d.blocking as string[]).join(", ")}` : ""}`;
     case "CORRECTION_SENT":
-      return `Correction ${d.channel === "sent" ? "sent" : "marked sent manually"} with reference ${d.token}`;
+      return `Correction ${d.channel === "sent" ? `email sent${d.to ? ` to ${d.to}` : ""}` : "marked sent manually"} with reference ${d.token}`;
     case "EXPORTED":
       return `Exported to payment list ${d.export_id}`;
     case "INVALID_TRANSITION_BLOCKED":

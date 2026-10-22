@@ -11,11 +11,15 @@ import { PgRunStore } from "@/server/db/pg-store";
 import { AnswerKeyExtractor, AnswerKeyProposer } from "@/server/extractor/answer-key-extractor";
 import { GeminiExtractor, GeminiMappingProposer, MemoryExtractionCache } from "@/server/extractor/gemini-extractor";
 import { transportFromEnv } from "@/server/extractor/gemini-transport";
+import { ResendSender, type MailSender } from "@/server/correction-email";
 
 // Wires the domain to real infrastructure from environment variables. Nothing here decides anything.
 //   DATABASE_URL     Postgres (Neon demo database). Without it: an in-memory store that resets on restart.
 //   GEMINI_API_KEY   with GEMINI_MODEL: the real extractor. Without them: the MOCK answer-key extractor.
 //   GEMINI_FALLBACK_MODEL  optional backup model for attempts after the main model is overloaded or times out.
+//   RESEND_API_KEY + AP_INBOX_ADDRESS  correction emails are sent by the app, with replies to the AP inbox.
+//                    RESEND_FROM sets the sender (default: Resend's test sender, which on the free plan without a
+//                    verified domain only delivers to the Resend account's own address). Without them: manual only.
 
 export interface RuntimeInfo {
   store: "postgres" | "memory";
@@ -25,12 +29,18 @@ export interface RuntimeInfo {
   /** Backup model, if configured (GEMINI_FALLBACK_MODEL). */
   fallbackModel: string | null;
   buyer: string;
+  /** How correction emails leave: sent by the app, or copied and marked sent manually. */
+  correctionEmail: { mode: "send"; from: string; reply_to: string } | { mode: "manual" };
 }
 
 export interface Runtime {
   deps: PipelineDeps;
   info: RuntimeInfo;
+  /** Present when the app sends correction emails itself. */
+  mail: { sender: MailSender; replyTo: string } | null;
 }
+
+export const DEFAULT_RESEND_FROM = "SpiceRoute AP (demo) <onboarding@resend.dev>";
 
 /** Calendar date in India (invoices and due dates are Indian business dates). */
 export function todayIst(d = new Date()): string {
@@ -84,6 +94,10 @@ function build(): Runtime {
     proposer = new AnswerKeyProposer();
   }
 
+  const resendKey = process.env.RESEND_API_KEY;
+  const inbox = (process.env.AP_INBOX_ADDRESS ?? "").trim();
+  const mail = resendKey && inbox ? { sender: new ResendSender(resendKey, process.env.RESEND_FROM || DEFAULT_RESEND_FROM), replyTo: inbox } : null;
+
   const deps: PipelineDeps = {
     store, reference, extractor, proposer,
     today: () => todayIst(),
@@ -93,6 +107,7 @@ function build(): Runtime {
   };
   return {
     deps,
+    mail,
     info: {
       store: dbUrl ? "postgres" : "memory",
       extractor: key && model ? "gemini" : "mock",
@@ -100,6 +115,7 @@ function build(): Runtime {
       model,
       fallbackModel: key && model ? fallbackModel : null,
       buyer: reference.settings.buyer.name,
+      correctionEmail: mail ? { mode: "send", from: mail.sender.from, reply_to: mail.replyTo } : { mode: "manual" },
     },
   };
 }

@@ -1,7 +1,7 @@
 import Decimal from "decimal.js";
 import { exceedsCap, paiseToRupees } from "../money";
 import type { ReferenceData } from "../engine/types";
-import { markCorrectionSent } from "./actions";
+import { markCorrectionSent, nextToken } from "./actions";
 import { processRun, type PipelineDeps } from "./pipeline";
 import { pushEvent, transition, TransitionRefused } from "./state-machine";
 import type { Approval, ExportRecord, RunRecord, StoreState } from "./types";
@@ -195,10 +195,42 @@ export function stopWaiting(deps: Deps, runId: string, ctx: ActionCtx): Promise<
 }
 
 /** Row 11: correction email sent or marked sent manually; issues the token. */
-export async function requestCorrection(deps: Deps, runId: string, ctx: ActionCtx & { channel?: "sent" | "marked sent manually" }): Promise<ActionResult<{ run: RunRecord; token: string }>> {
+export async function requestCorrection(
+  deps: Deps,
+  runId: string,
+  ctx: ActionCtx & {
+    channel?: "sent" | "marked sent manually";
+    /** The token already written into an email that went out: recording is refused if it would differ. */
+    expectToken?: string;
+    delivery?: { to: string | null; provider_message_id: string | null };
+  },
+): Promise<ActionResult<{ run: RunRecord; token: string }>> {
   try {
     guardIdentity(ctx.actor);
-    const value = await markCorrectionSent(deps, runId, ctx.actor, ctx.channel ?? "sent", (tx) => { getRun(tx, runId, ctx); });
+    const value = await markCorrectionSent(deps, runId, ctx.actor, ctx.channel ?? "sent", (tx) => {
+      const run = getRun(tx, runId, ctx);
+      if (ctx.expectToken && nextToken(tx, run) !== ctx.expectToken) {
+        throw new Refusal("ACTION_REPEAT_IGNORED", `another correction request was recorded for ${run.ref} in the meantime`);
+      }
+    }, ctx.delivery);
+    return { ok: true, value };
+  } catch (e) {
+    return act(deps, [runId], ctx, "request correction", () => { throw e; });
+  }
+}
+
+/**
+ * Row 11, before an email goes out: the same guards as requestCorrection (identity, current version, a held
+ * invoice), with nothing changed. Returns the token the request will carry. A refusal is logged like any other.
+ */
+export async function prepareCorrection(deps: Deps, runId: string, ctx: ActionCtx): Promise<ActionResult<{ run: RunRecord; token: string }>> {
+  try {
+    guardIdentity(ctx.actor);
+    const value = await deps.store.read((s) => {
+      const run = getRun(s, runId, ctx);
+      if (run.state !== "ON_HOLD") throw new Refusal("INVALID_TRANSITION_BLOCKED", `A correction request needs a held invoice; ${run.ref} is ${run.state}`);
+      return { run, token: nextToken(s, run) };
+    });
     return { ok: true, value };
   } catch (e) {
     return act(deps, [runId], ctx, "request correction", () => { throw e; });

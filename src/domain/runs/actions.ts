@@ -24,6 +24,7 @@ export function markCorrectionSent(
   actor: string,
   channel: "sent" | "marked sent manually" = "sent",
   check?: (tx: StoreState, run: RunRecord) => void,
+  delivery?: { to: string | null; provider_message_id: string | null },
 ): Promise<{ run: RunRecord; token: string }> {
   return deps.store.transaction((tx) => {
     const run = tx.runs.get(runId);
@@ -31,10 +32,11 @@ export function markCorrectionSent(
     check?.(tx, run);
     const at = deps.now();
     const token = nextToken(tx, run);
-    transition(tx, run, 11, "AWAITING_VENDOR", { actor, at, details: { token, channel } });
+    const sent = delivery ? { to: delivery.to, provider_message_id: delivery.provider_message_id } : {};
+    transition(tx, run, 11, "AWAITING_VENDOR", { actor, at, details: { token, channel, ...sent } });
     tx.tokens.set(token, run.run_id);
-    tx.corrections.push({ run_id: run.run_id, token, sent_at: at, channel });
-    pushEvent(tx, { run_id: run.run_id, type: "CORRECTION_SENT", actor, at, details: { token, channel } });
+    tx.corrections.push({ run_id: run.run_id, token, sent_at: at, channel, ...sent });
+    pushEvent(tx, { run_id: run.run_id, type: "CORRECTION_SENT", actor, at, details: { token, channel, ...sent } });
     return { run, token };
   });
 }

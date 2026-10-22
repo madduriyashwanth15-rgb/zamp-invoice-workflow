@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test:pg": "vitest run --config vitest.pg.config.mts",
     "test:live": "vitest run --config vitest.live.config.mts",
+    "test:live:golden": "vitest run --config vitest.live-golden.config.mts",
     "demo:reset": "node scripts/demo-reset.mjs"
   },
   "dependencies": {
