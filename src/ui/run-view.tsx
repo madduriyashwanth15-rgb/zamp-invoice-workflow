@@ -136,40 +136,47 @@ function stateSentence(run: RunDetail): string {
 function Decision({ run, onChanged }: { run: RunDetail; onChanged: () => void }) {
   const tone = toneClasses[run.tone];
   return (
-    <section aria-labelledby="decision-h" className={`rounded-md border p-4 ${tone}`}>
-      <h2 id="decision-h" className="text-lg font-bold">
-        {run.state === "CLEARED" ? "Cleared by checks" : run.state_label}
-      </h2>
-      <p className="mt-1">{stateSentence(run)}</p>
-      {inFlight(run) && <div className="reading-bar mt-3 h-1 rounded bg-carbon-wash" aria-hidden />}
-      {run.failure && run.state === "FAILED" && <p className="mt-2 text-sm">{run.failure}</p>}
+    // The top copy of the form: a band in the state's colour says where it stands; the sheet below says why and what next.
+    <section aria-labelledby="decision-h" className="overflow-hidden rounded-md border border-rule bg-surface">
+      <div className={`border-b px-4 py-3 sm:px-5 ${tone}`}>
+        <h2 id="decision-h" className="text-[1.1875rem] font-bold">
+          {run.state === "CLEARED" ? "Cleared by checks" : run.state_label}
+        </h2>
+        <p className="mt-0.5">{stateSentence(run)}</p>
+        {inFlight(run) && <div className="reading-bar mt-3 h-1 rounded bg-carbon-wash" aria-hidden />}
+        {run.failure && run.state === "FAILED" && <p className="mt-2 text-sm">{run.failure}</p>}
+      </div>
       {run.issues.length > 0 && run.state !== "SUPERSEDED" && (
-        <>
-          {run.state === "APPROVED" && <p className="mt-3 text-sm font-semibold">Approved despite:</p>}
-          <ul className="mt-3 space-y-3">
+        <div className="px-4 pt-4 pb-1 sm:px-5">
+          {run.state === "APPROVED" && <p className="mb-2 text-sm font-semibold">Approved despite:</p>}
+          <ul className="divide-y divide-rule">
             {run.issues.map((i) => (
-              <li key={`${i.codes.join("+")}-${i.line_no ?? ""}`} className="text-sm">
-                <p>
-                  <span className="font-semibold">{i.title}</span>
+              <li key={`${i.codes.join("+")}-${i.line_no ?? ""}`} className="max-w-[86ch] py-3 text-[0.9375rem] first:pt-0">
+                <p className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-semibold text-ink">{i.title}</span>
                   {i.codes.map((c) => (
-                    <span key={c} className="num ml-2 text-xs opacity-70">
+                    <span key={c} className="num text-xs text-ink-3">
                       {c}
                     </span>
                   ))}
                 </p>
-                <p className="mt-0.5">{i.explain}</p>
+                <p className="mt-0.5 text-ink">{i.explain}</p>
                 {i.next && (
-                  <p className="mt-0.5 opacity-90">
-                    <span className="font-semibold">To resolve: </span>
+                  <p className="mt-1 text-ink-2">
+                    <span className="font-semibold text-ink">To resolve: </span>
                     {i.next}
                   </p>
                 )}
               </li>
             ))}
           </ul>
-        </>
+        </div>
       )}
-      <Actions run={run} onChanged={onChanged} />
+      {run.actions.length > 0 && (
+        <div className="px-4 pb-4 sm:px-5">
+          <Actions run={run} onChanged={onChanged} />
+        </div>
+      )}
     </section>
   );
 }
@@ -224,7 +231,7 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
   });
 
   return (
-    <div className="mt-4 border-t border-current/20 pt-4">
+    <div className={run.issues.length > 0 && run.state !== "SUPERSEDED" ? "mt-1 border-t border-rule pt-4" : "pt-4"}>
       {run.recommended && (
         <p className="mb-2 text-sm">
           <span className="font-semibold">Recommended: {ACTION_TEXT[run.recommended.action].label.toLowerCase()}.</span> {run.recommended.why}
@@ -577,23 +584,35 @@ const STATUS_MARK: Record<StageView["status"], { text: string; cls: string }> = 
 /** The routing slip: every stage in order, who did it, and what it found. AI work is pencilled (dashed). */
 function RoutingSlip({ run }: { run: RunDetail }) {
   const expected = inFlight(run) ? ["Is it an invoice?", "Does the document hold together?", "Vendor, sender and bank details", "Duplicates and corrections", "Which purchase order?", "Lines matched to the PO", "Prices and quantities against the PO", "Decision", "Reviewer decision"] : [];
+  const aiRead = run.stages.some((s) => s.by_ai);
   return (
     <section aria-labelledby="slip-h" className="rounded-md border border-rule bg-surface">
       <div className="border-b border-rule px-4 py-3">
-        <h2 id="slip-h" className="text-lg font-bold">Routing slip</h2>
+        <h2 id="slip-h" className="text-[1.1875rem] font-bold">Routing slip</h2>
         <p className="text-sm text-ink-2">
-          Every check, in order, then the reviewer. <span className="border-b-2 border-dashed border-graphite">Dashed</span> steps were done by AI; the checks
-          are code that verifies the AI&apos;s reading.
+          {aiRead ? (
+            <>
+              Every check in order, then the reviewer. The <span className="border-b-2 border-dashed border-graphite">pencilled</span> step was done by AI; every
+              check after it is code that verifies what the AI read.
+            </>
+          ) : (
+            "Every check in order, then the reviewer. Each check is code, and it verifies what was read in step 1."
+          )}
         </p>
       </div>
-      <ol>
+      <ol className="relative px-4 py-2">
+        {/* The rail: one line through every step's mark. */}
+        <span aria-hidden className="absolute top-6 bottom-6 left-[1.6875rem] w-0.5 bg-rule" />
         {run.stages.map((s) => (
           <Stage key={s.id} s={s} />
         ))}
         {expected.slice(run.stages.length - 2).map((t, i) => (
-          <li key={t} className="flex gap-3 border-b border-rule px-4 py-3 text-ink-3 last:border-b-0">
-            <span className="num w-5 shrink-0 text-right">{i + 2}</span>
-            <span>{t}</span>
+          <li key={t} className="relative grid grid-cols-[1.75rem_1fr] gap-3 py-2.5 text-ink-3">
+            <StageMark status="pending" ai={false} />
+            <span>
+              <span className="num mr-2 text-xs">{i + 2}</span>
+              {t}
+            </span>
           </li>
         ))}
       </ol>
@@ -601,37 +620,69 @@ function RoutingSlip({ run }: { run: RunDetail }) {
   );
 }
 
+const MARK_CLS: Record<StageView["status"], string> = {
+  passed: "bg-stamp-ok text-white",
+  held: "bg-hold-edge text-hold-fg",
+  rejected: "bg-bad-fg text-white",
+  skipped: "bg-muted-edge text-muted-fg",
+  not_evaluated: "border-2 border-dashed border-rule-strong bg-surface text-ink-3",
+  running: "bg-carbon text-white slip-running",
+  pending: "border-2 border-rule-strong bg-surface text-ink-3",
+  failed: "bg-bad-fg text-white",
+  awaiting_review: "border-2 border-carbon bg-surface text-carbon",
+  reviewed: "bg-approved-bg text-approved-fg",
+  not_needed: "border-2 border-rule-strong bg-surface text-ink-3",
+};
+
+/** The mark on the rail: a tick, a stop, a cross, or an empty ring for a step not reached or still to come. */
+function StageMark({ status, ai }: { status: StageView["status"]; ai: boolean }) {
+  const glyph = status === "passed" || status === "reviewed" ? "tick" : status === "held" ? "bang" : status === "rejected" || status === "failed" ? "cross" : status === "skipped" ? "dash" : null;
+  return (
+    <span aria-hidden className={`relative z-10 mt-0.5 flex h-7 w-7 items-center justify-center rounded-full ${MARK_CLS[status]} ${ai ? "outline-2 outline-offset-2 outline-dashed outline-graphite" : ""}`}>
+      {glyph && (
+        <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          {glyph === "tick" && <path d="M3.5 8.5l3 3 6-7" />}
+          {glyph === "bang" && <path d="M8 3.5v5.5M8 12.2v.3" />}
+          {glyph === "cross" && <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />}
+          {glyph === "dash" && <path d="M4 8h8" />}
+        </svg>
+      )}
+    </span>
+  );
+}
+
 function Stage({ s }: { s: StageView }) {
   const mark = STATUS_MARK[s.status];
   return (
-    <li className={`border-b border-rule px-4 py-3 last:border-b-0 ${s.by_ai ? "border-l-4 border-l-graphite [border-left-style:dashed]" : "border-l-4 border-l-transparent"}`}>
-      <div className="flex items-baseline gap-3">
-        <span className="num w-5 shrink-0 text-right text-ink-3">{s.n}</span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-            <h3 className="font-semibold">{s.title}</h3>
-            <span className={`text-sm ${mark.cls}`}>{s.status_text ?? mark.text}</span>
-          </div>
-          <p className={`text-xs ${s.by_ai ? "text-graphite" : "text-ink-3"}`}>{s.by}</p>
-          {s.notes.filter((n) => n.text).length > 0 && (
-            <ul className="mt-1.5 space-y-0.5 break-words text-sm text-ink-2">
-              {s.notes.filter((n) => n.text).map((n, i) => (
-                <li key={i}>
-                  {n.at && <span className="num mr-2 text-xs text-ink-3">{formatTime(n.at)}</span>}
-                  {n.text}
-                  {n.rule && <span className="num ml-2 text-xs text-ink-3" title="Rule in the workflow spec">{n.rule}</span>}
-                </li>
-              ))}
-            </ul>
-          )}
-          {s.findings.length > 0 && (
-            <ul className="mt-2 space-y-2">
-              {s.findings.map((f, i) => (
-                <Finding key={`${f.code}-${i}`} f={f} />
-              ))}
-            </ul>
-          )}
+    <li className="relative grid grid-cols-[1.75rem_1fr] gap-3 py-2.5">
+      <StageMark status={s.status} ai={s.by_ai} />
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+          <h3 className="font-semibold">
+            <span className="num mr-2 text-xs font-normal text-ink-3">{s.n}</span>
+            {s.title}
+          </h3>
+          <span className={`text-sm ${mark.cls}`}>{s.status_text ?? mark.text}</span>
         </div>
+        <p className={`text-xs ${s.by_ai ? "text-graphite" : "text-ink-3"}`}>{s.by}</p>
+        {s.notes.filter((n) => n.text).length > 0 && (
+          <ul className="mt-1.5 space-y-0.5 break-words text-sm text-ink-2">
+            {s.notes.filter((n) => n.text).map((n, i) => (
+              <li key={i}>
+                {n.at && <span className="num mr-2 text-xs text-ink-3">{formatTime(n.at)}</span>}
+                {n.text}
+                {n.rule && <span className="num ml-2 text-xs text-ink-3" title="Rule in the workflow spec">{n.rule}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
+        {s.findings.length > 0 && (
+          <ul className="mt-2 space-y-2">
+            {s.findings.map((f, i) => (
+              <Finding key={`${f.code}-${i}`} f={f} />
+            ))}
+          </ul>
+        )}
       </div>
     </li>
   );

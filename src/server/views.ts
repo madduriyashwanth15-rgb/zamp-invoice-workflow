@@ -34,6 +34,8 @@ export interface RunSummary {
   invoice_number: string | null;
   invoice_date: string | null;
   total: string | null;
+  /** The total as a decimal rupee string ("10620.00"), for sums on the desk; null when not read. */
+  total_rupees: string | null;
   po_number: string | null;
   /** False when the purchase-order check did not run, so "none matched" would be untrue. */
   po_checked: boolean;
@@ -47,6 +49,17 @@ export interface RunSummary {
   created_at: string;
   updated_at: string;
   filename: string | null;
+  /** The routing slip in brief, for the queue: reading, the eight checks and the reviewer, each with its status. */
+  slip: SlipMark[];
+}
+
+/** One step of the routing slip in brief. Statuses come from the run's recorded stages; nothing is inferred. */
+export interface SlipMark {
+  id: string;
+  title: string;
+  status: "passed" | "held" | "rejected" | "skipped" | "not_reached" | "running" | "waiting" | "done";
+  /** The step was done by an AI model (reading with Gemini); MOCK and code steps are not. */
+  ai: boolean;
 }
 
 export interface FindingView extends CodeView {
@@ -163,11 +176,34 @@ export function summarize(run: RunRecord, ref: ReferenceData): RunSummary {
     vendor_checked: Boolean(vendor) || evaluated(run, "vendor"),
     invoice_number: run.extraction?.invoice_number ?? null, invoice_date: run.invoice_date ?? run.extraction?.invoice_date ?? null,
     total: run.total_paise != null ? fmtRupees(run.total_paise) : formatInr(run.extraction?.total),
+    total_rupees: run.total_paise != null ? paiseToRupees(run.total_paise) : null,
     po_number: run.po_number, po_checked: Boolean(run.po_number) || evaluated(run, "po"), due_date: run.due_date,
     primary: run.state === "CLEARED" || run.state === "APPROVED" || run.state === "SUPERSEDED" ? null : primary,
     blocking_count: run.blocking_codes.length, exported: run.exported, export_id: run.export_id, export_blocked: run.export_blocked,
     version: run.version, created_at: run.created_at, updated_at: run.updated_at, filename: run.filename,
+    slip: slipOf(run),
   };
+}
+
+const SLIP_STAGES = ["classify", "document", "vendor", "duplicates", "po", "lines", "compare", "decide"] as const;
+
+function slipOf(run: RunRecord): SlipMark[] {
+  const reading = run.state === "RECEIVED" || run.state === "PROCESSING";
+  const read: SlipMark = {
+    id: "read", title: "Read the document", ai: /gemini/i.test(run.extracted_by?.extractor ?? ""),
+    status: run.extraction ? "passed" : reading ? "running" : run.blocking_codes.includes("EXTRACTION_FAILED") ? "held" : run.state === "SKIPPED" ? "skipped" : run.state === "FAILED" ? "rejected" : "not_reached",
+  };
+  const checks: SlipMark[] = SLIP_STAGES.map((id) => {
+    const st = run.engine?.stages.find((x) => x.stage === id);
+    const status: SlipMark["status"] = !st || st.status === "not_evaluated" ? (reading ? "waiting" : "not_reached") : st.status;
+    return { id, title: ENGINE_TITLES[id], status, ai: false };
+  });
+  const decided = run.state === "APPROVED" || (run.state === "REJECTED" && run.primary_reason !== "DUPLICATE_INVOICE") || run.state === "SUPERSEDED";
+  const review: SlipMark = {
+    id: "review", title: "Reviewer decision", ai: false,
+    status: decided ? "done" : run.state === "CLEARED" || run.state === "ON_HOLD" || run.state === "AWAITING_VENDOR" ? "waiting" : "not_reached",
+  };
+  return [read, ...checks, review];
 }
 
 function findingView(f: Finding, blocking: boolean): FindingView {
@@ -211,6 +247,9 @@ export function plainNote(note: string, reader = "The AI"): NoteView {
   const due = /^Due \(per terms\): (\d{4}-\d{2}-\d{2}) \((\d+) days\)$/.exec(text);
   if (due) text = `Due (per terms): ${formatDate(due[1])}, ${due[2]} days after the invoice date`;
   const ai = /^AI doc_type: ([^;]*); title "([^"]*)"; number label "([^"]*)"$/.exec(text);
+  const c3 = /^(-?\d+\.\d{2}) invoiced \+ (-?\d+\.\d{2}) already billed within (\S+) cap$/.exec(text);
+  if (c3) text = `${formatInr(c3[1])} invoiced plus ${formatInr(c3[2])} already billed is within what ${c3[3]} allows`;
+  text = text.replace(/^Line (\d+) -> PO line/, "Line $1 matched to PO line");
   if (ai) text = `${reader} read it as ${ai[1] === "invoice" ? "an invoice" : `a ${ai[1].replace(/_/g, " ")}`}${ai[2] ? `, titled "${ai[2]}"` : ""}${ai[3] ? `, number labelled "${ai[3]}"` : ""}`;
   return { rule, text: text.charAt(0).toUpperCase() + text.slice(1) };
 }
@@ -262,14 +301,18 @@ function stagesOf(run: RunRecord, named: (t: string) => string = (t) => t): Stag
   if (!run.engine) return out;
   for (const st of run.engine.stages) {
     const blockingSet = new Set(run.engine.blocking.map((f) => `${f.code}|${f.stage}|${f.line_no ?? ""}|${f.message}`));
-    const usedAi = st.findings.some((f) => f.code === "LINE_MAPPED_AI_VERIFIED" || f.code === "AI_PROPOSAL_REJECTED");
+    const proposal = (f: Finding) => f.code === "LINE_MAPPED_AI_VERIFIED" || f.code === "AI_PROPOSAL_REJECTED";
+    const usedProposal = st.findings.some(proposal);
+    // U12: on a MOCK run the line proposal came from the scripted MOCK proposer, so nothing may say "AI".
+    const unAi = (t: string) => (reader === "The AI" ? t : t.replace(/\bAI\b/g, "MOCK"));
     out.push({
       n: ENGINE_STAGE_NO[st.stage], id: st.stage, title: ENGINE_TITLES[st.stage] ?? st.label,
-      by: usedAi ? "Code (checked an AI line proposal)" : "Code", by_ai: false,
+      by: usedProposal ? `Code (checked ${reader === "The AI" ? "an AI" : "a MOCK"} line proposal)` : "Code", by_ai: false,
       status: st.status, status_text: null, notes: st.notes.map((n) => plainNote(named(n), reader)),
       findings: st.findings.map((f) => {
         const v = findingView(f, blockingSet.has(`${f.code}|${f.stage}|${f.line_no ?? ""}|${f.message}`));
-        return { ...v, message: named(v.message), evidence: v.evidence.map((e) => ({ ...e, value: named(e.value) })) };
+        const fix = proposal(f) ? unAi : (t: string) => t;
+        return { ...v, title: fix(v.title), message: fix(named(v.message)), evidence: v.evidence.map((e) => ({ ...e, value: named(e.value) })) };
       }),
     });
   }

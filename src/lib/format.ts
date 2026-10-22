@@ -28,3 +28,17 @@ export function formatTime(iso: string | null | undefined): string | null {
   if (Number.isNaN(d.getTime())) return iso;
   return new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(d);
 }
+
+/** Sum of decimal rupee strings ("10620.00"), exactly, in paise. Returns a decimal rupee string. */
+export function sumRupees(values: (string | null | undefined)[]): string {
+  let paise = 0n;
+  for (const v of values) {
+    const m = v == null ? null : /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(v.trim());
+    if (!m) continue;
+    const p = BigInt(m[2]) * 100n + BigInt((m[3] ?? "").padEnd(2, "0") || "0");
+    paise += m[1] ? -p : p;
+  }
+  const neg = paise < 0n;
+  const a = neg ? -paise : paise;
+  return `${neg ? "-" : ""}${a / 100n}.${(a % 100n).toString().padStart(2, "0")}`;
+}

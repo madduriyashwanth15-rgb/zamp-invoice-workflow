@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import type { RunSummary } from "@/server/views";
-import { formatDate, formatTime } from "@/lib/format";
+import { formatDate, formatInr, formatTime, sumRupees } from "@/lib/format";
 import { api, errorText, type Listing } from "./api";
-import { StateChip } from "./chips";
+import { SlipStrip, SlipSwatch, StateChip } from "./chips";
 import { useIdentity } from "./identity";
 import { usePoll } from "./use-poll";
 
@@ -36,9 +36,8 @@ export function Desk() {
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <section aria-labelledby="queue-h" className="min-w-0">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <h1 id="queue-h" className="text-2xl font-bold tracking-tight">Invoices</h1>
-        </div>
+        <h1 id="queue-h" className="text-[2rem] font-[780] leading-tight tracking-[-0.015em]">Invoices</h1>
+        <Ledger runs={runs} loaded={Boolean(data)} />
         <Upload onUploaded={refresh} />
         <nav aria-label="Filter invoices" className="mt-6 flex flex-wrap gap-1 border-b border-rule">
           {FILTERS.map((f) => {
@@ -79,6 +78,36 @@ export function Desk() {
         <HowItWorks />
       </aside>
     </div>
+  );
+}
+
+/** The desk in one sentence, from the runs themselves: what needs a person, and what is ready for finance. */
+function Ledger({ runs, loaded }: { runs: RunSummary[]; loaded: boolean }) {
+  if (!loaded) return <p className="mt-2 mb-6 text-[1.1875rem] text-ink-3">Counting the desk</p>;
+  const group = (test: (r: RunSummary) => boolean) => {
+    const rs = runs.filter(test);
+    return { n: rs.length, sum: formatInr(sumRupees(rs.map((r) => r.total_rupees))), unread: rs.some((r) => r.total_rupees == null) };
+  };
+  const review = group(FILTERS[0].test);
+  const cleared = group((r) => r.state === "CLEARED");
+  const ready = group((r) => r.state === "APPROVED" && !r.exported && !r.export_blocked);
+  const waiting = group((r) => r.state === "AWAITING_VENDOR");
+  const amount = (g: ReturnType<typeof group>) => (
+    <span className="num font-semibold text-ink">
+      {g.sum}
+      {g.unread ? " and some totals not read" : ""}
+    </span>
+  );
+  const invoices = (n: number) => `${n} invoice${n === 1 ? "" : "s"}`;
+  const parts: React.ReactNode[] = [];
+  if (review.n) parts.push(<span key="r"><span className="font-semibold text-ink">{invoices(review.n)}</span> need{review.n === 1 ? "s" : ""} a decision, {amount(review)} in all.</span>);
+  if (cleared.n) parts.push(<span key="c"> {cleared.n} cleared by the checks, {amount(cleared)}, wait{cleared.n === 1 ? "s" : ""} for approval.</span>);
+  if (ready.n) parts.push(<span key="a"> {ready.n} approved, {amount(ready)}, {ready.n === 1 ? "is" : "are"} ready for the payment list.</span>);
+  if (waiting.n) parts.push(<span key="w"> {waiting.n} {waiting.n === 1 ? "is" : "are"} waiting for a vendor&apos;s correction.</span>);
+  return (
+    <p className="mt-2 mb-6 max-w-[62ch] text-[1.1875rem] leading-snug text-ink-2">
+      {parts.length ? parts : runs.length ? "Nothing needs a person right now." : "No invoices yet. Add one below, or send one from Demo emails."}
+    </p>
   );
 }
 
@@ -250,12 +279,13 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
                 </span>
                 <StateChip tone={r.tone} label={r.state_label} exported={r.exported} />
               </div>
+              <SlipStrip slip={r.slip} />
               <p className="text-sm text-ink-2">
                 <Why r={r} />
                 {r.export_blocked && <span className="block text-xs text-bad-fg">Export blocked</span>}
               </p>
               <p className="truncate text-xs text-ink-3">
-                {formatTime(r.created_at)} <span className="num">{r.ref}</span> · {r.source === "email" ? `Email, ${r.received_from}` : `Upload, ${r.received_from} (demo identity)`}
+                <span className="num">{r.ref}</span>, {r.source === "email" ? `emailed by ${r.received_from}` : `uploaded by ${r.received_from} (demo identity)`}, {formatTime(r.created_at)}
               </p>
             </div>
           </li>
@@ -275,11 +305,10 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
                   />
                 </th>
               )}
-              <th className="px-4 py-2 font-semibold">Vendor and invoice</th>
-              <th className="px-4 py-2 text-right font-semibold">Total</th>
-              <th className="px-4 py-2 font-semibold">Received</th>
-              <th className="px-4 py-2 font-semibold">Status</th>
-              <th className="px-4 py-2 font-semibold">Why</th>
+              <th className="px-4 py-2.5 font-semibold">Vendor and invoice</th>
+              <th className="px-4 py-2.5 text-right font-semibold">Total</th>
+              <th className="px-4 py-2.5 font-semibold" title="The routing slip: reading, the eight checks, then the reviewer">Status and routing slip</th>
+              <th className="px-4 py-2.5 font-semibold">Why</th>
             </tr>
           </thead>
           <tbody>
@@ -304,19 +333,17 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
                     {r.invoice_number ? <span className="num">{r.invoice_number}</span> : <span className="text-ink-3">no number read</span>}
                     {r.invoice_date && <span className="text-ink-3">, {formatDate(r.invoice_date)}</span>}
                   </div>
-                </td>
-                <td className="num px-4 py-3 text-right align-top font-semibold">{r.total ?? <span className="font-normal text-ink-3">not read</span>}</td>
-                <td className="px-4 py-3 align-top text-ink-2">
-                  <div className="whitespace-nowrap">
-                    {formatTime(r.created_at)} <span className="num text-xs text-ink-3">{r.ref}</span>
-                  </div>
-                  <div className="max-w-[13rem] truncate text-xs text-ink-3" title={r.received_from ?? undefined}>
-                    {r.source === "email" ? `Email, ${r.received_from}` : `Upload, ${r.received_from} (demo identity)`}
+                  <div className="mt-0.5 max-w-[22rem] truncate text-xs text-ink-3" title={r.received_from ?? undefined}>
+                    <span className="num">{r.ref}</span>, {r.source === "email" ? `emailed by ${r.received_from}` : `uploaded by ${r.received_from} (demo identity)`}, {formatTime(r.created_at)}
                   </div>
                 </td>
+                <td className="num px-4 py-3 text-right align-top font-semibold whitespace-nowrap">{r.total ?? <span className="font-normal text-ink-3">not read</span>}</td>
                 <td className="px-4 py-3 align-top">
                   <StateChip tone={r.tone} label={r.state_label} exported={r.exported} />
                   {r.export_blocked && <div className="mt-1 text-xs text-bad-fg">Export blocked</div>}
+                  <div className="mt-2">
+                    <SlipStrip slip={r.slip} />
+                  </div>
                 </td>
                 <td className="px-4 py-3 align-top text-ink-2">
                   <Why r={r} />
@@ -419,6 +446,8 @@ function PaymentList({ listing, onChanged }: { listing: Listing | null; onChange
   );
 }
 
+const Legend = SlipSwatch;
+
 function HowItWorks() {
   return (
     <section aria-labelledby="how-h" className="rounded-md border border-rule bg-surface p-4 text-sm text-ink-2">
@@ -426,6 +455,11 @@ function HowItWorks() {
       <p className="mt-2">
         The AI only reads the document. Code then checks every value against the PDF text, the vendor master and
         the purchase order, and decides. Nothing reaches the payment list without a person approving it.
+      </p>
+      <p className="mt-3">
+        Each invoice&apos;s routing slip shows the reading, the eight checks and the reviewer, in order:{" "}
+        <Legend status="passed" /> passed, <Legend status="held" /> held, <Legend status="not_reached" /> not reached, and{" "}
+        <Legend status="waiting" /> waiting for a reviewer.
       </p>
     </section>
   );

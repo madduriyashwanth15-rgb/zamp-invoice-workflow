@@ -125,6 +125,16 @@ describe("wording slips (U12)", () => {
     expect(notes.some((t) => /^The MOCK reading read it as a quotation/.test(t))).toBe(true);
   });
 
+  it("a MOCK line proposal (S14) is never called AI, and the PO-cap note reads in rupees", async () => {
+    const deps = makeDeps();
+    const d = await view(deps, await deliver(deps, "S14", {}));
+    const lines = d.stages.find((s) => s.id === "lines")!;
+    expect(lines.by).toBe("Code (checked a MOCK line proposal)");
+    expect(JSON.stringify(lines.findings.map((f) => [f.title, f.message]))).not.toMatch(/\bAI\b/);
+    expect(lines.notes[0].text).toMatch(/^Line 1 matched to PO line 1 /);
+    expect(d.stages.find((s) => s.id === "compare")!.notes.map((n) => n.text)).toContain("₹13,000.00 invoiced plus ₹0.00 already billed is within what PO-1009 allows");
+  });
+
   it("a skipped file says why it was skipped: not an invoice, unsupported file, or no attachment", async () => {
     const deps = makeDeps();
     const s9 = await view(deps, await deliver(deps, "S9", {}));

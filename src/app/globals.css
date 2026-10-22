@@ -36,6 +36,7 @@
   --muted-bg: #eceef0;
   --muted-fg: #535b6a;
   --muted-edge: #c9ced6;
+  --stamp-ok: #3d8a58;
 }
 
 @theme inline {
@@ -67,6 +68,7 @@
   --color-muted-bg: var(--muted-bg);
   --color-muted-fg: var(--muted-fg);
   --color-muted-edge: var(--muted-edge);
+  --color-stamp-ok: var(--stamp-ok);
   --font-sans: "Atkinson Hyperlegible Next Variable", ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -105,6 +107,14 @@ body {
 @keyframes reading {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(250%); }
+}
+
+@keyframes slip-running {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.slip-running {
+  animation: slip-running 1.2s ease-in-out infinite;
 }
 
 .reading-bar {
