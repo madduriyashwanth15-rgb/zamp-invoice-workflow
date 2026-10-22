@@ -25,6 +25,30 @@ export interface ActionOption {
   needsNote: boolean;
   /** Override of a known vendor's invoice with no PO found: the reviewer must name one of these open POs (C4b). */
   po_choices?: string[];
+  /** Override of a bank, vendor or sender hold: a callback record is required (spec v1.4 row 9, Q9). */
+  callback?: CallbackRequirement;
+}
+
+export interface CallbackRequirement {
+  codes: ReasonCode[];
+  /** The number the call must use; null when the vendor is not in the master (there is no trusted number). */
+  master_phone: string | null;
+}
+
+/** Holds whose override needs a recorded phone call (spec v1.4 row 9, Q9): identity, sender and bank account. */
+export const CALLBACK_CODES: readonly ReasonCode[] = ["VENDOR_UNKNOWN", "VENDOR_GSTIN_MISMATCH", "SENDER_UNVERIFIED", "BANK_DETAILS_CHANGED"];
+
+export function callbackRequirement(run: RunRecord, ref?: ReferenceData): CallbackRequirement | undefined {
+  const codes = run.blocking_codes.filter((c) => CALLBACK_CODES.includes(c));
+  if (!codes.length) return undefined;
+  const vendor = run.vendor_id ? ref?.vendors.find((v) => v.vendor_id === run.vendor_id) : undefined;
+  return { codes, master_phone: vendor?.phone ?? null };
+}
+
+/** Same phone number: the last 10 digits agree (so "+91 80 0000 1002" and "080 0000 1002" match). */
+export function samePhone(a: string, b: string): boolean {
+  const d = (s: string) => s.replace(/\D/g, "").slice(-10);
+  return d(a).length >= 8 && d(a) === d(b);
 }
 
 /**
@@ -75,7 +99,10 @@ export function poChoices(run: RunRecord, ref?: ReferenceData): string[] | undef
 export function availableActions(run: RunRecord, s: Pick<StoreState, "runs">, ref?: ReferenceData): ActionOption[] {
   const out: ActionOption[] = [];
   const canOverride = overrideBlockedReason(run) === null;
-  const override = (row: number): ActionOption => ({ action: "override_approve", row, needsNote: true, ...(poChoices(run, ref) ? { po_choices: poChoices(run, ref) } : {}) });
+  const callback = callbackRequirement(run, ref);
+  const override = (row: number): ActionOption => ({
+    action: "override_approve", row, needsNote: true, ...(poChoices(run, ref) ? { po_choices: poChoices(run, ref) } : {}), ...(callback ? { callback } : {}),
+  });
   const only = (code: string) => run.blocking_codes.length === 1 && run.blocking_codes[0] === code;
   switch (run.state) {
     case "CLEARED":

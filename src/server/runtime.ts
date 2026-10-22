@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { Pool } from "pg";
 import type { MappingProposer, ReferenceData } from "@/domain/engine/types";
 import { MemoryRunStore } from "@/domain/runs/memory-store";
@@ -110,6 +110,7 @@ function build(): Runtime {
     today: () => todayIst(),
     now: () => new Date().toISOString(),
     newId: () => randomUUID(),
+    newSecret: () => randomBytes(16).toString("hex"),
     newRef: nextRef,
   };
   return {

@@ -146,7 +146,7 @@ States: RECEIVED, PROCESSING, SKIPPED, CLEARED, ON_HOLD, AWAITING_VENDOR, APPROV
 | 6 | CLEARED | APPROVED | approve, individual or batch | user | no | display name and time recorded; not export-blocked; P9 |
 | 7 | CLEARED | ON_HOLD | manual hold | user | yes | code MANUAL_HOLD (A5) |
 | 8 | CLEARED | ON_HOLD | RELATED_INVOICE_DISPUTE (D3) | system | no | consumption released |
-| 9 | ON_HOLD | APPROVED | override | user | yes | C2/C3 re-run (second confirmation if failing); P9 and P9b; C4b (PO named when none was found); blocked if the counterpart in D3 is exported; never supersedes |
+| 9 | ON_HOLD | APPROVED | override | user | yes | C2/C3 re-run (second confirmation if failing); P9 and P9b; C4b (PO named when none was found); a hold on the vendor, its GSTIN, the sender or the bank account needs a callback record (number called, person, time; the vendor-master number when the vendor is known) and a second confirmation (v1.4, Q9); blocked if the counterpart in D3 is exported; never supersedes |
 | 10 | ON_HOLD | REJECTED | reject | user | yes | |
 | 11 | ON_HOLD | AWAITING_VENDOR | correction email sent or marked sent manually; only when a hold is one the vendor can fix (v1.4, section 18) | user | no | token issued and logged |
 | 12 | AWAITING_VENDOR | ON_HOLD | vendor reply held (D2) | system | no | |
@@ -248,9 +248,9 @@ Decided by the owner on 23 Oct 2026 (audit decisions Q1-Q11). Rows marked implem
 | AI line matches need code-checked support, not only a matching unit | M3b | Q3 | Implemented (section 7) |
 | An override counts PO use; the reviewer names the PO when none was found | C4b, row 9 | Q1 | Implemented (sections 8, 11) |
 | Duplicate guard at override (same file or same number and vendor); no override of CREDIT_NOTE_UNSUPPORTED | P9b, rows 9, 14, 16, 17 | Q4 | Implemented (sections 1, 11). Also: no override when the total was never read (a payment needs an amount; flagged to the owner) |
-| Random reply tokens; DMARC "gray" still auto-links | D2 | Q7 | Pending |
+| Random reply tokens; DMARC "gray" still auto-links | D2 | Q7 | Implemented: each run has a secret random seed (never shown) from which its R-<ref><4 characters> tokens are made; runs from before v1.4 keep run-id tokens. Only a DMARC fail stops auto-linking (unchanged) |
 | Buyer GSTIN is not checked: stated limitation | Section 15 | Q8 | Pending |
-| Bank, vendor and sender overrides need a callback record and a second confirmation | Row 9 | Q9 | Pending |
+| Bank, vendor and sender overrides need a callback record and a second confirmation | Row 9 | Q9 | Implemented (section 11). Covers VENDOR_UNKNOWN, VENDOR_GSTIN_MISMATCH, SENDER_UNVERIFIED and BANK_DETAILS_CHANGED; a number other than the vendor-master number is refused (K4: verify by phone on the master number). The GSTIN hold is included as a vendor-identity hold (flagged to the owner) |
 | Undoing an approval before export | Section 11 | Q10 | Deferred |
 | Demo reset requires DEMO_ADMIN_KEY | Demo tools | Q5 | Implemented (a92657f) |
 | A correction request is offered only when a hold is one the vendor can fix, and the email lists only those, in plain words without rule codes. Not offered for bank account, sender, vendor-master, duplicate or correction-link holds, an unread bank account (K4b), values not found in the text (V3) or our reader disagreeing with an invoice title (G2): those are checks on our side, and for a changed bank account the email would ask the possibly compromised sender to confirm their own change | Row 11, section 13 | Audit U03 (safer default, flagged to the owner) | Implemented (section 11) |

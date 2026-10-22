@@ -179,7 +179,9 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
   const [open, setOpen] = useState<ReviewAction | null>(null);
   const [note, setNote] = useState("");
   const [po, setPo] = useState("");
-  const [confirm, setConfirm] = useState<{ action: ReviewAction; problems: string[] } | null>(null);
+  const [call, setCall] = useState({ number: "", spoke: "", when: "" });
+  const [confirm, setConfirm] = useState<{ action: ReviewAction; problems: string[]; kind: "po" | "callback"; reason: string } | null>(null);
+  const [confirmed, setConfirmed] = useState<{ po: boolean; callback: boolean }>({ po: false, callback: false });
   const [pending, setPending] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -197,11 +199,14 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
       setOpen(null);
       setNote("");
       setPo("");
+      setCall({ number: "", spoke: "", when: "" });
       setConfirm(null);
+      setConfirmed({ po: false, callback: false });
       onChanged();
     } catch (e) {
-      if (isRefusal(e) && e.code === "NEEDS_CONFIRMATION") setConfirm({ action, problems: e.details?.problems ?? [e.reason] });
-      else setMsg({ ok: false, text: errorText(e) });
+      if (isRefusal(e) && e.code === "NEEDS_CONFIRMATION") {
+        setConfirm({ action, problems: e.details?.problems ?? [e.reason], kind: e.details?.confirm === "callback" ? "callback" : "po", reason: e.reason });
+      } else setMsg({ ok: false, text: errorText(e) });
     } finally {
       setPending(false);
     }
@@ -209,6 +214,14 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
 
   // U05: the recommended action leads; with none, every option is shown alike and the reviewer decides.
   const primary = (a: ReviewAction) => run.recommended?.action === a;
+
+  /** What the open form adds to the request: the PO named (C4b), the callback record (Q9) and any confirmations given. */
+  const extras = (opt: typeof current | undefined, given = confirmed): Record<string, unknown> => ({
+    ...(opt?.po_choices ? { poNumber: po } : {}),
+    ...(opt?.callback ? { callback: { number_called: call.number, spoke_to: call.spoke, called_at: call.when ? new Date(call.when).toISOString() : "" } } : {}),
+    ...(given.callback ? { confirmCallback: true } : {}),
+    ...(given.po ? { confirmFailingChecks: true } : {}),
+  });
 
   return (
     <div className="mt-4 border-t border-current/20 pt-4">
@@ -227,6 +240,8 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
             onClick={() => {
               setMsg(null);
               setConfirm(null);
+              setConfirmed({ po: false, callback: false });
+              if (a.callback && call.when === "") setCall({ ...call, when: localNow() });
               if (a.needsNote || a.action === "request_correction") setOpen(open === a.action ? null : a.action);
               else submit(a.action);
             }}
@@ -314,9 +329,10 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
           className="mt-4 rounded-md border border-rule bg-surface p-3 text-ink"
           onSubmit={(e) => {
             e.preventDefault();
-            submit(current.action, current.po_choices ? { poNumber: po } : {});
+            submit(current.action, extras(current));
           }}
         >
+          {current.callback && <CallbackFields need={current.callback} vendor={run.vendor} call={call} setCall={setCall} />}
           {current.po_choices && (
             <div className="mb-3">
               <label htmlFor="po-choice" className="text-sm font-semibold">
@@ -350,7 +366,11 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
             placeholder={current.action === "reject" ? "For example: price not agreed, vendor will reissue" : "For example: confirmed with the vendor by phone"}
           />
           <div className="mt-2 flex gap-2">
-            <button type="submit" disabled={pending || !note.trim() || (Boolean(current.po_choices) && !po)} className="rounded-md bg-carbon px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50">
+            <button
+              type="submit"
+              disabled={pending || !note.trim() || (Boolean(current.po_choices) && !po) || (Boolean(current.callback) && (!call.number.trim() || !call.spoke.trim() || !call.when))}
+              className="rounded-md bg-carbon px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
               {ACTION_TEXT[current.action].label}
             </button>
             <button type="button" onClick={() => setOpen(null)} className="rounded-md px-3 py-1.5 text-sm text-ink-2 hover:text-ink">
@@ -362,7 +382,7 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
 
       {confirm && (
         <div role="alert" className="mt-4 rounded-md border border-bad-edge bg-bad-bg p-3 text-bad-fg">
-          <p className="font-semibold">Approving this would bill more than the purchase order allows:</p>
+          <p className="font-semibold">{confirm.kind === "callback" ? `${confirm.reason.replace(/\. Confirm again to approve$/, "")}. Approve only if the call settled this:` : "Approving this would bill more than the purchase order allows:"}</p>
           <ul className="mt-1 list-disc pl-5 text-sm">
             {confirm.problems.map((p) => (
               <li key={p}>{p}</li>
@@ -371,10 +391,14 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
           <button
             type="button"
             disabled={pending}
-            onClick={() => submit(confirm.action, { confirmFailingChecks: true, ...(po ? { poNumber: po } : {}) })}
+            onClick={() => {
+              const given = { ...confirmed, [confirm.kind]: true };
+              setConfirmed(given);
+              submit(confirm.action, extras(run.actions.find((a) => a.action === confirm.action), given));
+            }}
             className="mt-3 rounded-md bg-bad-fg px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
           >
-            Approve anyway
+            {confirm.kind === "callback" ? "Confirm and approve" : "Approve anyway"}
           </button>
         </div>
       )}
@@ -385,6 +409,49 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
         </p>
       )}
     </div>
+  );
+}
+
+/** The browser's local time now, in the format a datetime-local input takes ("2026-10-23T09:40"). */
+function localNow(): string {
+  const d = new Date();
+  d.setSeconds(0, 0);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+type CallState = { number: string; spoke: string; when: string };
+
+/** Spec v1.4 row 9 (Q9): the call that confirmed a bank, vendor or sender hold, entered before the override. */
+function CallbackFields({ need, vendor, call, setCall }: { need: NonNullable<RunDetail["actions"][number]["callback"]>; vendor: string | null; call: CallState; setCall: (c: CallState) => void }) {
+  const input = "mt-1 block w-full rounded-md border border-rule-strong bg-surface p-2 text-sm";
+  return (
+    <fieldset className="mb-3 rounded-md border border-bad-edge bg-bad-bg/40 p-3">
+      <legend className="px-1 text-sm font-semibold text-bad-fg">Call the vendor first</legend>
+      <p className="text-sm text-ink">
+        {need.master_phone ? (
+          <>
+            Call {vendor ?? "the vendor"} on <span className="num font-semibold">{need.master_phone}</span>, the number in the vendor master. Never use a number printed on the
+            invoice or in the email: if the invoice is fraudulent, that number reaches the fraudster.
+          </>
+        ) : (
+          <>This vendor is not in the vendor master, so there is no trusted number. Use one you can trust, and say in the note how you know it is theirs.</>
+        )}
+      </p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        <label className="text-sm">
+          Number called
+          <input type="tel" required value={call.number} onChange={(e) => setCall({ ...call, number: e.target.value })} className={`num ${input}`} />
+        </label>
+        <label className="text-sm">
+          Spoke to
+          <input type="text" required value={call.spoke} onChange={(e) => setCall({ ...call, spoke: e.target.value })} placeholder="Name and role" className={input} />
+        </label>
+        <label className="text-sm">
+          When
+          <input type="datetime-local" required value={call.when} onChange={(e) => setCall({ ...call, when: e.target.value })} className={`num ${input}`} />
+        </label>
+      </div>
+    </fieldset>
   );
 }
 

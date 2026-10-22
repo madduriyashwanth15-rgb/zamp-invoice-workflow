@@ -3,7 +3,7 @@ import { MAX_ATTACHMENT_BYTES, SUPPORTED_TYPES } from "@/domain/intake/inbound-e
 import { failStuckRuns, processRun, receive, receiveUnreadable } from "@/domain/runs/pipeline";
 import {
   approve, confirmCorrectionLink, exportApproved, manualHold, overrideApprove, processAsInvoice, reject, replaceApproved,
-  requestCorrection, retry, stopWaiting, type ActionResult,
+  requestCorrection, retry, stopWaiting, type ActionResult, type CallbackInput,
 } from "@/domain/runs/review";
 import type { ReviewAction } from "@/domain/runs/queries";
 import { paiseToRupees } from "@/domain/money";
@@ -80,6 +80,9 @@ export interface ActionBody {
   confirmFailingChecks?: boolean;
   /** Override only: the PO a reviewer names when the code found none (spec v1.4 C4b). */
   poNumber?: string | null;
+  /** Override of a bank, vendor or sender hold: the call that confirmed it, then a second confirmation (v1.4 row 9). */
+  callback?: CallbackInput | null;
+  confirmCallback?: boolean;
   channel?: "sent" | "marked sent manually";
 }
 
@@ -89,7 +92,10 @@ export async function act(runId: string, body: ActionBody): Promise<ActionResult
   switch (body.action) {
     case "approve": return approve(deps, [runId], ctx);
     case "manual_hold": return manualHold(deps, runId, ctx);
-    case "override_approve": return overrideApprove(deps, runId, { ...ctx, confirmFailingChecks: body.confirmFailingChecks, poNumber: body.poNumber ?? null });
+    case "override_approve":
+      return overrideApprove(deps, runId, {
+        ...ctx, confirmFailingChecks: body.confirmFailingChecks, poNumber: body.poNumber ?? null, callback: body.callback ?? null, confirmCallback: body.confirmCallback,
+      });
     case "reject": return reject(deps, runId, ctx);
     case "request_correction":
       if (body.channel !== "sent") return requestCorrection(deps, runId, { ...ctx, channel: "marked sent manually" });

@@ -46,6 +46,11 @@ export interface RunRecord {
   supersedes_run_ids: string[];
   superseded_by_run_id: string | null;
   failure: string | null;
+  /**
+   * Secret random seed for this run's reply tokens (spec v1.4 D2, Q7). Never shown or sent: unlike the run id, which
+   * is in every link, it cannot be read from the app. Absent on runs created before v1.4 (the run id is used).
+   */
+  token_seed?: string;
   created_at: string;
   updated_at: string;
 }
@@ -57,6 +62,19 @@ export interface Approval {
   mode: "individual" | "batch" | "override" | "link-confirmation" | "replacement";
   batch_id: string | null;
   note: string | null;
+  /** Override of a bank, vendor or sender hold: the call that confirmed it (spec v1.4 row 9, Q9). */
+  callback?: CallbackRecord;
+}
+
+/** A reviewer's record of the phone call that confirmed a bank, vendor or sender hold before an override. */
+export interface CallbackRecord {
+  number_called: string;
+  spoke_to: string;
+  called_at: string;
+  /** The holds the call confirmed. */
+  codes: string[];
+  /** The vendor-master number the call had to use; null for a vendor not in the master. */
+  master_phone: string | null;
 }
 
 export interface ExportRecord {

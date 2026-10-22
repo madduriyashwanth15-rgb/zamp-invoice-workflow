@@ -5,7 +5,7 @@ import type { RuntimeInfo } from "@/server/runtime";
 
 // Browser-side calls to the API routes. Every refusal comes back with the domain's code and reason.
 
-export type Refusal = { ok: false; code: string; reason: string; details?: { problems?: string[] } };
+export type Refusal = { ok: false; code: string; reason: string; details?: { problems?: string[]; confirm?: "po" | "callback"; master_phone?: string | null } };
 export type Listing = { runs: RunSummary[]; exports: { export_id: string; created_by: string; created_at: string; count: number }[] };
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {

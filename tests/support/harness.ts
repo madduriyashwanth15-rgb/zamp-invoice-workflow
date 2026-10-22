@@ -167,3 +167,13 @@ export function passRule(e: GoldenEntry): { pass: boolean; problems: string[] } 
 export const oracle: { test_id: string; state: string; blocking: string[]; info: string[] }[] = JSON.parse(
   readFileSync(path.join(TEST_DATA_DIR, "oracle_results.json"), "utf-8"),
 );
+
+/**
+ * The callback record a reviewer enters before overriding a bank, vendor or sender hold (spec v1.4 row 9), already
+ * confirmed a second time. `phone` is the vendor-master number for a known vendor; any number for an unknown one.
+ */
+export function called(phone = "+91 98450 00000") {
+  return { callback: { number_called: phone, spoke_to: "Ravi, accounts", called_at: "2026-10-22T08:30:00.000Z" }, confirmCallback: true };
+}
+
+export const masterPhone = (vendorId: string) => reference.vendors.find((v) => v.vendor_id === vendorId)!.phone;

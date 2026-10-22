@@ -7,13 +7,15 @@ import type { RunRecord, StoreState } from "./types";
 
 /**
  * The reply token for the next correction request on this run (A12): "R-<ref><4 characters>", a new one on each
- * request; earlier tokens stay valid for the same run. The suffix comes from the run id (random in the app), so a
- * token cannot be guessed from the visible reference alone.
+ * request; earlier tokens stay valid for the same run. The suffix comes from the run's secret random seed (spec v1.4
+ * D2, Q7), which is never shown, so a token cannot be worked out from anything visible (the reference or the run id
+ * in a link). The same request always shows the same token, so the email previewed is the email recorded.
+ * Runs from before v1.4 have no seed and keep their run-id tokens.
  */
 export function nextToken(tx: Pick<StoreState, "tokens">, run: RunRecord): string {
   const issued = [...tx.tokens.values()].filter((id) => id === run.run_id).length;
   let h = 0x811c9dc5;
-  for (const ch of `${run.run_id}:${issued}`) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
+  for (const ch of `${run.token_seed ?? run.run_id}:${issued}`) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
   return `R-${run.ref}${h.toString(36).toUpperCase().padStart(4, "0").slice(-4)}`;
 }
 

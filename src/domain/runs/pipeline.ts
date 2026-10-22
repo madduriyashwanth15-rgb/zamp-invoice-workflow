@@ -34,6 +34,8 @@ export interface PipelineDeps {
   today: () => string;
   now: () => string;
   newId: () => string;
+  /** Cryptographic randomness for reply-token seeds (Q7); tests may omit it (tokens then derive from the run id). */
+  newSecret?: () => string;
   /** Short human reference for a new run (the reply token is "R-<ref>"); called inside the receiving transaction. */
   newRef: (tx: StoreState) => string;
   extractor: Extractor;
@@ -94,6 +96,7 @@ export function receive(deps: PipelineDeps, doc: IncomingDocument): Promise<Rece
       total_paise: null, po_number: null, blocking_codes: [], info_codes: [], primary_reason: null, consumption: [],
       due_date: null, exported: false, export_id: null, export_blocked: false, export_block_reason: null,
       supersedes_run_ids: [], superseded_by_run_id: null, failure: null, created_at: at, updated_at: at,
+      ...(deps.newSecret ? { token_seed: deps.newSecret() } : {}),
     };
     tx.runs.set(run.run_id, run);
     tx.documents.set(run.run_id, {

@@ -6,18 +6,19 @@ import { normInvoiceNumber, normText } from "../normalise";
 import type { ReferenceData } from "../engine/types";
 import { markCorrectionSent, nextToken } from "./actions";
 import { processRun, type PipelineDeps } from "./pipeline";
-import { overrideBlockedReason, poChoices, vendorCanFix } from "./queries";
+import type { ReasonCode } from "../codes";
+import { callbackRequirement, overrideBlockedReason, poChoices, samePhone, vendorCanFix } from "./queries";
+import { pushEvent, transition, TransitionRefused } from "./state-machine";
+import type { Approval, CallbackRecord, ExportRecord, RunRecord, StoreState } from "./types";
 
 const NOTHING_FOR_VENDOR = "Nothing on this invoice is for the vendor to correct: these holds are checks on our side (for a changed bank account, call the vendor on the master number)";
-import { pushEvent, transition, TransitionRefused } from "./state-machine";
-import type { Approval, ExportRecord, RunRecord, StoreState } from "./types";
 
 // Reviewer actions (spec 11-13). Every action needs a demo display name (U1, T13); every refusal is logged
 // INVALID_TRANSITION_BLOCKED with its reason; a stale or repeated action is a logged no-op (ACTION_REPEAT_IGNORED, T8).
 
 export type ActionFailure = {
   ok: false;
-  code: "INVALID_TRANSITION_BLOCKED" | "ACTION_REPEAT_IGNORED" | "IDENTITY_REQUIRED" | "NEEDS_CONFIRMATION" | "NEEDS_PO";
+  code: "INVALID_TRANSITION_BLOCKED" | "ACTION_REPEAT_IGNORED" | "IDENTITY_REQUIRED" | "NEEDS_CONFIRMATION" | "NEEDS_PO" | "NEEDS_CALLBACK";
   reason: string;
   details?: Record<string, unknown>;
 };
@@ -66,7 +67,7 @@ async function act<T>(deps: Deps, runIds: string[], ctx: ActionCtx, action: stri
         : e instanceof TransitionRefused ? { ok: false, code: "INVALID_TRANSITION_BLOCKED", reason: e.reason }
           : (() => { throw e; })();
     // A request for more input (a second confirmation, or which PO) is a question back to the reviewer, not a refusal.
-    if (failure.code !== "IDENTITY_REQUIRED" && failure.code !== "NEEDS_CONFIRMATION" && failure.code !== "NEEDS_PO") {
+    if (failure.code !== "IDENTITY_REQUIRED" && failure.code !== "NEEDS_CONFIRMATION" && failure.code !== "NEEDS_PO" && failure.code !== "NEEDS_CALLBACK") {
       await deps.store.transaction((tx) => {
         for (const id of runIds.length ? runIds : [null]) {
           pushEvent(tx, {
@@ -172,9 +173,53 @@ export function approve(deps: Deps, runIds: string[], ctx: ActionCtx & { expecte
   });
 }
 
+export interface CallbackInput {
+  number_called: string;
+  spoke_to: string;
+  /** ISO timestamp of the call. */
+  called_at: string;
+}
+
+/**
+ * Spec v1.4 row 9 (Q9): an override of a bank, vendor or sender hold needs the call that confirmed it, made to the
+ * vendor-master number when there is one, and then a second, explicit confirmation of what is being approved.
+ */
+function checkCallback(run: RunRecord, ref: ReferenceData, at: string, ctx: { callback?: CallbackInput | null; confirmCallback?: boolean }): CallbackRecord | null {
+  const need = callbackRequirement(run, ref);
+  if (!need) return null;
+  const titles = need.codes.map((c) => CALLBACK_WHAT[c] ?? c).join(", ");
+  const c = ctx.callback;
+  if (!c || !c.number_called?.trim() || !c.spoke_to?.trim() || !c.called_at?.trim()) {
+    throw new Refusal("NEEDS_CALLBACK", `Record the call that confirmed ${titles}: the number you called, who you spoke to and when`, { ...need });
+  }
+  const when = Date.parse(c.called_at);
+  if (Number.isNaN(when)) throw new Refusal("NEEDS_CALLBACK", "The time of the call is not a valid date and time", { ...need });
+  if (when > Date.parse(at) + 5 * 60_000) throw new Refusal("NEEDS_CALLBACK", "The time of the call is in the future", { ...need });
+  if (need.master_phone && !samePhone(c.number_called, need.master_phone)) {
+    throw new Refusal("INVALID_TRANSITION_BLOCKED",
+      `${c.number_called.trim()} is not the vendor-master number. Call ${need.master_phone}; never a number from the invoice or the email`);
+  }
+  if (!ctx.confirmCallback) {
+    const vendor = run.vendor_id ? ref.vendors.find((v) => v.vendor_id === run.vendor_id) : undefined;
+    const problems = need.codes.map((code) => {
+      const f = run.engine?.blocking.find((x) => x.code === code);
+      if (code === "BANK_DETAILS_CHANGED") return `Payment would go to the account ending ${f?.evidence.printed_last4 ?? "?"}, not the vendor-master account ending ${f?.evidence.master_last4 ?? vendor?.bank_last4 ?? "?"}`;
+      if (code === "SENDER_UNVERIFIED") return `The invoice came from ${run.sender_email ?? "an unverified sender"}, which is not verified for ${vendor?.legal_name ?? "this vendor"}`;
+      if (code === "VENDOR_UNKNOWN") return `${run.extraction?.vendor_name ?? "This vendor"} is not in the vendor master; nothing about it was checked`;
+      return `The GSTIN printed (${f?.evidence.printed ?? "?"}) is not the vendor master's (${f?.evidence.master ?? "?"})`;
+    });
+    throw new Refusal("NEEDS_CONFIRMATION", `Call recorded: ${c.spoke_to.trim()} on ${c.number_called.trim()}. Confirm again to approve`, { problems, confirm: "callback" });
+  }
+  return { number_called: c.number_called.trim(), spoke_to: c.spoke_to.trim(), called_at: new Date(when).toISOString(), codes: need.codes, master_phone: need.master_phone };
+}
+
+const CALLBACK_WHAT: Partial<Record<ReasonCode, string>> = {
+  VENDOR_UNKNOWN: "the vendor", VENDOR_GSTIN_MISMATCH: "the vendor's GSTIN", SENDER_UNVERIFIED: "the sender", BANK_DETAILS_CHANGED: "the bank account",
+};
+
 /** Rows 9 and 14: approve a held run by override. C2/C3 re-run; failing them needs a second confirmation. Never supersedes. */
 export function overrideApprove(
-  deps: Deps, runId: string, ctx: ActionCtx & { confirmFailingChecks?: boolean; poNumber?: string | null },
+  deps: Deps, runId: string, ctx: ActionCtx & { confirmFailingChecks?: boolean; poNumber?: string | null; callback?: CallbackInput | null; confirmCallback?: boolean },
 ): Promise<ActionResult<RunRecord>> {
   return act(deps, [runId], ctx, "override approve", (tx) => {
     const run = getRun(tx, runId, ctx);
@@ -186,6 +231,7 @@ export function overrideApprove(
     const other = chainHasOtherPayable(tx, run);
     if (other) throw new Refusal("INVALID_TRANSITION_BLOCKED", `CHAIN_INVARIANT: ${other.ref} is already ${other.state} for this invoice number`);
     guardSameInvoice(tx, run);
+    const callback = checkCallback(run, deps.reference, deps.now(), ctx);
     // C4b: no PO was found for a known vendor, so the reviewer names the PO this invoice belongs to and it is counted.
     const choices = poChoices(run, deps.reference);
     let namedPo: string | null = null;
@@ -207,9 +253,12 @@ export function overrideApprove(
     const row = run.state === "AWAITING_VENDOR" ? 14 : 9;
     transition(tx, run, row, "APPROVED", {
       actor: ctx.actor, at, note: ctx.note,
-      details: { overridden: run.blocking_codes, c2c3: problems, confirmed: Boolean(ctx.confirmFailingChecks), ...(namedPo ? { po_named_by_reviewer: namedPo } : {}) },
+      details: {
+        overridden: run.blocking_codes, c2c3: problems, confirmed: Boolean(ctx.confirmFailingChecks),
+        ...(namedPo ? { po_named_by_reviewer: namedPo } : {}), ...(callback ? { callback } : {}),
+      },
     });
-    recordApproval(tx, run, { approver_display_name: ctx.actor, approved_at: at, mode: "override", batch_id: null, note: ctx.note ?? null }, deps.reference);
+    recordApproval(tx, run, { approver_display_name: ctx.actor, approved_at: at, mode: "override", batch_id: null, note: ctx.note ?? null, ...(callback ? { callback } : {}) }, deps.reference);
     return run;
   });
 }

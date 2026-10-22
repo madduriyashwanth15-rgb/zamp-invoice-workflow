@@ -5,7 +5,7 @@ import type { RunRecord } from "@/domain/runs/types";
 import { GeminiExtractor, MemoryExtractionCache } from "@/server/extractor/gemini-extractor";
 import type { GeminiTransport } from "@/server/extractor/gemini-transport";
 import { detail, plainNote, reviewStage, type RunDetail } from "@/server/views";
-import { deliver, makeDeps, reference, tests } from "./support/harness";
+import { called, deliver, makeDeps, masterPhone, reference, tests } from "./support/harness";
 
 // Review of the live screens, 22 Oct: findings fixed with a test each.
 const DIVYA = { actor: "Divya (AP)" };
@@ -16,7 +16,7 @@ describe("due date on every approval (finance needs it on the payment list)", ()
     const run = await deliver(deps, "S1", {}, { emailOverride: (_id, e) => ({ ...e, from: "someone@unregistered.example" }) });
     expect(run.blocking_codes).toEqual(["SENDER_UNVERIFIED"]);
     expect(run.due_date).toBeNull();
-    const r = await overrideApprove(deps, run.run_id, { ...DIVYA, note: "Sender confirmed by phone on the vendor-master number" });
+    const r = await overrideApprove(deps, run.run_id, { ...DIVYA, note: "Sender confirmed by phone on the vendor-master number", ...called(masterPhone(run.vendor_id!)) });
     expect(r.ok && r.value.due_date).toBe("2026-11-11"); // 12 Oct + 30 days (FreshPack terms)
     const x = await exportApproved(deps, DIVYA);
     expect(x.ok && x.value.runs.map((v) => v.due_date)).toEqual(["2026-11-11"]);
@@ -33,7 +33,7 @@ describe("due date on every approval (finance needs it on the payment list)", ()
   it("unknown vendor (S8) approved with an exception: no terms to apply, the due date stays empty", async () => {
     const deps = makeDeps();
     const run = await deliver(deps, "S8", {});
-    const r = await overrideApprove(deps, run.run_id, { ...DIVYA, note: "One-off supplier, checked by phone" });
+    const r = await overrideApprove(deps, run.run_id, { ...DIVYA, note: "One-off supplier, checked by phone", ...called() });
     expect(r.ok && r.value.state).toBe("APPROVED");
     expect(r.ok && r.value.due_date).toBeNull();
   });
@@ -125,9 +125,9 @@ describe("the reviewer's decision is the last step of the routing slip (fix 3)",
   it("S8 approved with an exception: the reviewer's note is on the slip", async () => {
     const deps = makeDeps();
     const run = await deliver(deps, "S8", {});
-    await overrideApprove(deps, run.run_id, { ...DIVYA, note: "One-off supplier, checked by phone" });
+    await overrideApprove(deps, run.run_id, { ...DIVYA, note: "One-off supplier, checked by phone", ...called() });
     const r = stage(await viewOf(deps, run.run_id), "review");
-    expect(r.notes[0].text).toBe("Approved with an exception by Divya (AP) (demo identity). Note: One-off supplier, checked by phone");
+    expect(r.notes[0].text).toBe("Approved with an exception by Divya (AP) (demo identity). Call recorded: Ravi, accounts on +91 98450 00000, 22 Oct, 14:00 (India time). Note: One-off supplier, checked by phone");
   });
 
   it("S9 skipped: no action needed, and it says a reviewer can still process it as an invoice", async () => {

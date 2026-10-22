@@ -6,7 +6,7 @@ import { availableActions } from "@/domain/runs/queries";
 import { approve, exportApproved, overrideApprove, processAsInvoice, requestCorrection } from "@/domain/runs/review";
 import { readTextLayer } from "@/server/pdf-text";
 import { extractionOf, textFrom } from "./support/direct";
-import { AnswerKeyExtractor, deliver, makeDeps, reference } from "./support/harness";
+import { AnswerKeyExtractor, called, deliver, makeDeps, reference } from "./support/harness";
 
 // Audit 23 Oct (A01, A06, B08): a person's override must not open a path around the PO caps or the duplicate rules.
 // MOCK reader (fixture extractions); the pipeline, rule engine, review actions and store are the real code.
@@ -93,7 +93,7 @@ describe("an override counts against the PO (spec v1.4 C4b, audit A01)", () => {
   it("an unknown vendor has no POs to choose from, so its override needs none (S8)", async () => {
     const deps = makeDeps();
     const s8 = await deliver(deps, "S8", {});
-    const r = await overrideApprove(deps, s8.run_id, { ...DIVYA, note: "One-off supplier, verified by phone" });
+    const r = await overrideApprove(deps, s8.run_id, { ...DIVYA, note: "One-off supplier, verified by phone", ...called() });
     expect(r.ok).toBe(true);
   });
 
@@ -132,8 +132,8 @@ describe("no second payment for the same invoice through an override (spec v1.4 
     const e = extractionOf("S8");
     const first = await send("one.pdf", e, { sha256: "same-file" });
     const twin = await send("two.pdf", { ...e, invoice_number: "QS-55-B" }, { sha256: "same-file" });
-    expect((await overrideApprove(deps, first.run_id, { ...DIVYA, note: "new supplier, verified" })).ok).toBe(true);
-    const again = await overrideApprove(deps, twin.run_id, { ...DIVYA, note: "new supplier, verified" });
+    expect((await overrideApprove(deps, first.run_id, { ...DIVYA, note: "new supplier, verified", ...called() })).ok).toBe(true);
+    const again = await overrideApprove(deps, twin.run_id, { ...DIVYA, note: "new supplier, verified", ...called() });
     expect(again).toMatchObject({ ok: false, code: "INVALID_TRANSITION_BLOCKED" });
     if (!again.ok) expect(again.reason).toMatch(/^POSSIBLE_DOUBLE_BILLING: .*same file/);
   });
@@ -142,8 +142,8 @@ describe("no second payment for the same invoice through an override (spec v1.4 
     const deps = makeDeps();
     const a = await deliver(deps, "S8", {});
     const b = await deliver(deps, "S8", {}, { emailOverride: (_t, e) => ({ ...e, provider_email_id: e.provider_email_id + "-resent" }) });
-    expect((await overrideApprove(deps, a.run_id, { ...DIVYA, note: "new supplier, onboarding pending" })).ok).toBe(true);
-    const ob = await overrideApprove(deps, b.run_id, { ...DIVYA, note: "new supplier, onboarding pending" });
+    expect((await overrideApprove(deps, a.run_id, { ...DIVYA, note: "new supplier, onboarding pending", ...called() })).ok).toBe(true);
+    const ob = await overrideApprove(deps, b.run_id, { ...DIVYA, note: "new supplier, onboarding pending", ...called() });
     expect(ob).toMatchObject({ ok: false, code: "INVALID_TRANSITION_BLOCKED" });
     if (!ob.ok) expect(ob.reason).toMatch(/^POSSIBLE_DOUBLE_BILLING: .*QS-55/);
     const x = await exportApproved(deps, DIVYA);

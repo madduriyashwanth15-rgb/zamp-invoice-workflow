@@ -6,7 +6,7 @@ import { paiseToRupees } from "@/domain/money";
 import { availableActions, vendorCanFix, type ActionOption } from "@/domain/runs/queries";
 import type { Approval, AuditEvent, CorrectionRequest, ExportRecord, Logs, RunRecord, StoreState, StoredDocument } from "@/domain/runs/types";
 import { nextToken } from "@/domain/runs/actions";
-import { formatDate, formatInr } from "@/lib/format";
+import { formatDate, formatInr, formatTime } from "@/lib/format";
 import { CODE_TEXT, STATE_TEXT, type Tone } from "@/lib/reason-text";
 import { holdNoteOf, issuesOf, readerName, recommendedAction, unitInr, vendorReasons, type ExplainContext, type IssueView, type Recommended } from "./explain";
 
@@ -325,7 +325,9 @@ export function reviewStage(run: RunRecord, events: AuditEvent[], actions: Actio
   const human = events.filter((e) => e.actor !== "system" && ((e.type === "STATE_CHANGED" && e.to_state) || e.type === "EXPORTED"));
   const notes: NoteView[] = human.map((e) => {
     const what = e.type === "EXPORTED" ? `Exported to payment list ${String((e.details ?? {}).export_id ?? "")}`.trim() : reviewerAction(e);
-    return { rule: null, text: `${what} by ${e.actor} (demo identity)${e.note ? `. Note: ${e.note}` : ""}`, at: e.at };
+    const cb = (e.details ?? {}).callback as { number_called?: string; spoke_to?: string; called_at?: string } | undefined;
+    const call = cb ? `. Call recorded: ${cb.spoke_to} on ${cb.number_called}, ${formatTime(cb.called_at)} (India time)` : "";
+    return { rule: null, text: `${what} by ${e.actor} (demo identity)${call}${e.note ? `. Note: ${e.note}` : ""}`, at: e.at };
   });
   const waiting = actions.length > 0 && (run.state === "CLEARED" || run.state === "ON_HOLD" || run.state === "FAILED");
   let status: StageView["status"];
