@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import type { RuntimeInfo } from "@/server/runtime";
 import { api, errorText } from "./api";
 import { useIdentity } from "./identity";
 
@@ -15,6 +16,9 @@ export function DemoTools() {
   const [confirm, setConfirm] = useState("");
   const [forget, setForget] = useState(false);
   const [realReader, setRealReader] = useState(false);
+  const [resetMode, setResetMode] = useState<RuntimeInfo["demoReset"]>("open");
+  // Component state only: never stored in the browser, cleared after a successful reset.
+  const [adminKey, setAdminKey] = useState("");
   const [resetMsg, setResetMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [inbox, setInbox] = useState<string | null>(null);
 
@@ -23,6 +27,7 @@ export function DemoTools() {
       (i) => {
         setInbox(i.correctionEmail.mode === "send" ? i.correctionEmail.reply_to : null);
         setRealReader(i.extractor === "gemini");
+        setResetMode(i.demoReset);
       },
       () => setInbox(null),
     );
@@ -44,10 +49,12 @@ export function DemoTools() {
     }));
   }
 
+  const showForget = realReader && resetMode !== "disabled";
+
   async function reset() {
     const res = await fetch("/api/demo/reset", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...(resetMode === "key" ? { "x-demo-admin-key": adminKey } : {}) },
       body: JSON.stringify({ actor: name, confirm, forgetReadings: forget }),
     });
     const body = await res.json().catch(() => ({}));
@@ -57,6 +64,7 @@ export function DemoTools() {
       setResult({});
       setConfirm("");
       setForget(false);
+      setAdminKey("");
     }
   }
 
@@ -134,8 +142,12 @@ export function DemoTools() {
 
       <section aria-labelledby="reset-h" className="rounded-md border border-bad-edge bg-surface p-4">
         <h2 id="reset-h" className="text-lg font-bold">Start again</h2>
-        <p className="mt-1 text-sm text-ink-2">Removes every invoice, approval, export and history entry. Saved readings are kept unless you tick the box, so the same files read instantly.</p>
-        {realReader && (
+        <p className="mt-1 text-sm text-ink-2">
+          Removes every invoice, approval, export and history entry.
+          {showForget && " Saved readings are kept unless you tick the box, so the same files read instantly."}
+        </p>
+        {resetMode === "disabled" && <p className="mt-3 text-sm font-semibold">Reset is turned off on this deployment.</p>}
+        {showForget && (
           <label className="mt-3 flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-0.5 h-4 w-4" checked={forget} onChange={(e) => setForget(e.target.checked)} />
             <span>
@@ -144,11 +156,23 @@ export function DemoTools() {
           </label>
         )}
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label htmlFor="confirm" className="text-sm">
-            Type RESET to confirm
-          </label>
-          <input id="confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="w-28 rounded-md border border-rule-strong px-2 py-1 text-sm" />
-          <button type="button" disabled={confirm !== "RESET"} onClick={reset} className="rounded-md bg-bad-fg px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
+          {resetMode === "key" && (
+            <>
+              <label htmlFor="admin-key" className="text-sm">
+                Admin key
+              </label>
+              <input id="admin-key" type="password" autoComplete="off" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} className="w-44 rounded-md border border-rule-strong px-2 py-1 text-sm" />
+            </>
+          )}
+          {resetMode !== "disabled" && (
+            <>
+              <label htmlFor="confirm" className="text-sm">
+                Type RESET to confirm
+              </label>
+              <input id="confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="w-28 rounded-md border border-rule-strong px-2 py-1 text-sm" />
+            </>
+          )}
+          <button type="button" disabled={resetMode === "disabled" || confirm !== "RESET" || (resetMode === "key" && !adminKey)} onClick={reset} className="rounded-md bg-bad-fg px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
             Remove everything
           </button>
         </div>

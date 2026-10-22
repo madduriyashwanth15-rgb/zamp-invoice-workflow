@@ -53,6 +53,7 @@ Settings (all optional; `.env.example` lists them):
 | `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` | Inbound email: Resend calls `/api/inbound/resend` (signature checked) |
 | `AP_INBOX_ADDRESS` | With `RESEND_API_KEY`: correction emails are sent by the app, replies go to this inbox |
 | `RESEND_FROM` | Sender of correction emails. Default: Resend's test sender, which without a verified domain only delivers to the Resend account's own address |
+| `DEMO_ADMIN_KEY` | Admin key for "Start again" on `/demo`, sent as the `x-demo-admin-key` header. Unset: reset is open in memory and turned off with a database |
 | `DEMO_SENDER_V01`..`V06` | Demo only: extra registered sender addresses per vendor (comma-separated), so a tester's own emails pass the sender check |
 
 Model choice (measured 22 Oct 2026): on the free tier `gemini-3.8-flash` allows 20 requests a day and returned
@@ -108,6 +109,7 @@ matrix pass rule; it must also agree with the independent oracle (`oracle_result
   reset, so replaying the same files costs no calls. To show a fresh AI reading, tick "Also forget saved readings"
   when resetting on the Demo emails page.
 - The `/demo` page simulates the email provider by replaying recorded test emails; intake and checks are the real ones.
+- On a deployment with a database, "Start again" needs the `DEMO_ADMIN_KEY` admin key and is turned off without it.
 
 ## Secrets
 

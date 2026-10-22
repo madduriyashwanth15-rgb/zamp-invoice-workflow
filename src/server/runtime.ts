@@ -12,6 +12,7 @@ import { AnswerKeyExtractor, AnswerKeyProposer } from "@/server/extractor/answer
 import { GeminiExtractor, GeminiMappingProposer, MemoryExtractionCache, type ExtractionCache } from "@/server/extractor/gemini-extractor";
 import { transportFromEnv } from "@/server/extractor/gemini-transport";
 import { ResendSender, type MailSender } from "@/server/correction-email";
+import { demoResetMode, type DemoResetMode } from "@/server/admin-guard";
 
 // Wires the domain to real infrastructure from environment variables. Nothing here decides anything.
 //   DATABASE_URL     Postgres (Neon demo database). Without it: an in-memory store that resets on restart.
@@ -20,6 +21,7 @@ import { ResendSender, type MailSender } from "@/server/correction-email";
 //   RESEND_API_KEY + AP_INBOX_ADDRESS  correction emails are sent by the app, with replies to the AP inbox.
 //                    RESEND_FROM sets the sender (default: Resend's test sender, which on the free plan without a
 //                    verified domain only delivers to the Resend account's own address). Without them: manual only.
+//   DEMO_ADMIN_KEY   required to reset demo data. Without it: reset is open in memory and off with a database.
 
 export interface RuntimeInfo {
   store: "postgres" | "memory";
@@ -31,6 +33,8 @@ export interface RuntimeInfo {
   buyer: string;
   /** How correction emails leave: sent by the app, or copied and marked sent manually. */
   correctionEmail: { mode: "send"; from: string; reply_to: string } | { mode: "manual" };
+  /** How /demo reset is guarded (admin-guard.ts). The key itself is never exposed. */
+  demoReset: DemoResetMode;
 }
 
 export interface Runtime {
@@ -120,6 +124,7 @@ function build(): Runtime {
       fallbackModel: key && model ? fallbackModel : null,
       buyer: reference.settings.buyer.name,
       correctionEmail: mail ? { mode: "send", from: mail.sender.from, reply_to: mail.replyTo } : { mode: "manual" },
+      demoReset: demoResetMode(process.env.DEMO_ADMIN_KEY, dbUrl ? "postgres" : "memory"),
     },
   };
 }
