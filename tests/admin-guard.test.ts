@@ -13,8 +13,9 @@ const KEY = "test-admin-key-7f3a9c";
 describe("checkAdminKey", () => {
   const withKey = { configured: KEY, store: "postgres" as const };
   it("accepts the configured key", () => expect(checkAdminKey(KEY, withKey)).toEqual({ ok: true }));
-  it("refuses a wrong key with 401", () => expect(checkAdminKey("test-admin-key-7f3a9d", withKey)).toMatchObject({ ok: false, status: 401, code: "ADMIN_KEY_REQUIRED" }));
-  it("refuses a missing key with 401", () => expect(checkAdminKey(null, withKey)).toMatchObject({ ok: false, status: 401, code: "ADMIN_KEY_REQUIRED" }));
+  it("refuses a wrong key with 401, saying the key is wrong", () => expect(checkAdminKey("test-admin-key-7f3a9d", withKey)).toMatchObject({ ok: false, status: 401, code: "ADMIN_KEY_REQUIRED", reason: "That admin key is not correct; nothing was reset" }));
+  it("refuses a missing key with 401, asking for it", () => expect(checkAdminKey(null, withKey)).toMatchObject({ ok: false, status: 401, code: "ADMIN_KEY_REQUIRED", reason: "Enter the admin key to reset this deployment" }));
+  it("a blank key counts as missing", () => expect(checkAdminKey("   ", withKey)).toMatchObject({ reason: "Enter the admin key to reset this deployment" }));
   it("refuses a key of a different length with 401", () => expect(checkAdminKey(`${KEY}-longer`, withKey)).toMatchObject({ ok: false, status: 401 }));
   it("is off (403) when no key is configured and a database is attached", () =>
     expect(checkAdminKey(null, { configured: "  ", store: "postgres" })).toMatchObject({ ok: false, status: 403, code: "RESET_DISABLED" }));

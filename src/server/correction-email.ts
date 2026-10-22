@@ -1,6 +1,7 @@
 import type { PipelineDeps } from "@/domain/runs/pipeline";
 import { prepareCorrection, requestCorrection, type ActionCtx, type ActionResult } from "@/domain/runs/review";
 import type { RunRecord } from "@/domain/runs/types";
+import { holdNoteOf } from "./explain";
 import { correctionDraft } from "./views";
 
 // Correction email actually sent (spec 13, row 11 "correction email sent"). The text is the code-built draft
@@ -78,7 +79,7 @@ export async function sendCorrection(
   const pre = await prepareCorrection(deps, runId, ctx);
   if (!pre.ok) return pre;
   const { run, token } = pre.value;
-  const draft = correctionDraft(run, token, deps.reference);
+  const draft = correctionDraft(run, token, deps.reference, holdNoteOf((await deps.store.logs(runId)).events));
   if (!draft.to) {
     return { ok: false, code: "EMAIL_NOT_SENT", reason: "There is no registered address for this vendor to send to. Copy the text and mark it sent manually." };
   }

@@ -20,6 +20,7 @@ export function checkAdminKey(provided: string | null, opts: { configured: strin
   if (mode === "open") return { ok: true };
   if (mode === "disabled") return { ok: false, status: 403, code: "RESET_DISABLED", reason: "Reset is turned off: DEMO_ADMIN_KEY is not set on this deployment" };
   // Equal-length SHA-256 digests, so the comparison is constant time and the key's length never leaks.
-  if (provided != null && timingSafeEqual(digest(provided), digest(opts.configured!.trim()))) return { ok: true };
-  return { ok: false, status: 401, code: "ADMIN_KEY_REQUIRED", reason: "Enter the admin key to reset this deployment" };
+  if (!provided?.trim()) return { ok: false, status: 401, code: "ADMIN_KEY_REQUIRED", reason: "Enter the admin key to reset this deployment" };
+  if (timingSafeEqual(digest(provided), digest(opts.configured!.trim()))) return { ok: true };
+  return { ok: false, status: 401, code: "ADMIN_KEY_REQUIRED", reason: "That admin key is not correct; nothing was reset" };
 }

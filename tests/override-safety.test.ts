@@ -187,3 +187,22 @@ describe("process as invoice needs the stored file (audit B08)", () => {
     expect((await deps.store.read((s) => s.runs.get(run.run_id)!)).state).toBe("SKIPPED");
   });
 });
+
+describe("correction requests only for what the vendor can fix (audit U03)", () => {
+  it("S2, bank account changed: no correction email is offered or accepted; the reviewer verifies by phone", async () => {
+    const deps = makeDeps();
+    const s2 = await deliver(deps, "S2", {});
+    expect(s2.blocking_codes).toEqual(["BANK_DETAILS_CHANGED"]);
+    expect(availableActions(s2, { runs: new Map() }).map((a) => a.action)).not.toContain("request_correction");
+    const r = await requestCorrection(deps, s2.run_id, { ...DIVYA, channel: "marked sent manually" });
+    expect(r).toMatchObject({ ok: false, code: "INVALID_TRANSITION_BLOCKED" });
+    expect((await deps.store.read((s) => s.runs.get(s2.run_id)!)).state).toBe("ON_HOLD");
+  });
+
+  it("S3, price over the PO: a correction request is offered and works as before", async () => {
+    const deps = makeDeps();
+    const s3 = await deliver(deps, "S3", {});
+    expect(availableActions(s3, { runs: new Map() }).map((a) => a.action)).toContain("request_correction");
+    expect((await requestCorrection(deps, s3.run_id, { ...DIVYA, channel: "marked sent manually" })).ok).toBe(true);
+  });
+});

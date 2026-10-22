@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import type { ReviewAction } from "@/domain/runs/queries";
-import type { FindingView, RunDetail, StageView } from "@/server/views";
+import type { FindingView, PoTableView, RunDetail, StageView } from "@/server/views";
 import { formatDate, formatInr, formatTime } from "@/lib/format";
 import { ACTION_TEXT, CODE_TEXT, STATE_TEXT } from "@/lib/reason-text";
 import { api, errorText, isRefusal } from "./api";
@@ -46,6 +46,7 @@ export function RunView() {
       )}
       <Header run={run} />
       <Decision run={run} onChanged={refresh} />
+      {run.po_table && <PoTable table={run.po_table} />}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] [&>*]:min-w-0">
         <RoutingSlip run={run} />
         <DocumentPanel run={run} />
@@ -72,7 +73,7 @@ function Header({ run }: { run: RunDetail }) {
           <h1 className="text-3xl font-bold tracking-tight">{run.vendor ?? run.filename ?? "Unread document"}</h1>
           {!run.vendor_known && run.vendor && (run.vendor_checked
             ? <p className="text-sm text-hold-fg">Name as printed; not found in the vendor master</p>
-            : <p className="text-sm text-ink-3">Name as printed; not checked against the vendor master{run.state === "SKIPPED" ? " (not an invoice)" : ""}</p>)}
+            : <p className="text-sm text-ink-3">Name as printed; not checked against the vendor master{run.state === "SKIPPED" ? ` (${run.primary?.code === "NOT_INVOICE" ? "not an invoice" : "not processed"})` : ""}</p>)}
         </div>
         <div className="text-right">
           <p className="num text-3xl font-bold">{run.total ?? <span className="text-xl font-normal text-ink-3">total not read</span>}</p>
@@ -118,7 +119,7 @@ function stateSentence(run: RunDetail): string {
         ? `Approved for payment list by ${demoName(lastApproval?.approver_display_name)}, ${formatTime(lastApproval?.approved_at)}. Exported to payment list ${run.export_id}.`
         : `Approved for payment list by ${demoName(lastApproval?.approver_display_name)}, ${formatTime(lastApproval?.approved_at)}${lastApproval?.mode && lastApproval.mode !== "individual" ? ` (${lastApproval.mode})` : ""}.${run.export_blocked ? " Export is blocked by a related dispute." : " It goes out with the next export."}`;
     case "ON_HOLD":
-      return `Held by ${run.blocking.length} check${run.blocking.length === 1 ? "" : "s"}. It stays off the payment list until a reviewer resolves ${run.blocking.length === 1 ? "it" : "them"}.`;
+      return `Held by ${run.issues.length} check${run.issues.length === 1 ? "" : "s"}. It stays off the payment list until a reviewer resolves ${run.issues.length === 1 ? "it" : "them"}.`;
     case "AWAITING_VENDOR":
       return `Correction requested with reference [Ref ${run.token_active}]. A reply that carries it, from the vendor's registered address, is linked to this invoice and replaces it only if it passes every check.`;
     case "REJECTED":
@@ -142,16 +143,31 @@ function Decision({ run, onChanged }: { run: RunDetail; onChanged: () => void })
       <p className="mt-1">{stateSentence(run)}</p>
       {inFlight(run) && <div className="reading-bar mt-3 h-1 rounded bg-carbon-wash" aria-hidden />}
       {run.failure && run.state === "FAILED" && <p className="mt-2 text-sm">{run.failure}</p>}
-      {run.blocking.length > 0 && run.state !== "SUPERSEDED" && (
-        <ul className="mt-3 space-y-1.5">
-          {run.blocking.map((c) => (
-            <li key={c.code} className="text-sm">
-              <span className="font-semibold">{c.title}</span>
-              {c.next && <span> {c.next}</span>}
-              <span className="ml-2 text-xs opacity-70">{c.code}</span>
-            </li>
-          ))}
-        </ul>
+      {run.issues.length > 0 && run.state !== "SUPERSEDED" && (
+        <>
+          {run.state === "APPROVED" && <p className="mt-3 text-sm font-semibold">Approved despite:</p>}
+          <ul className="mt-3 space-y-3">
+            {run.issues.map((i) => (
+              <li key={`${i.codes.join("+")}-${i.line_no ?? ""}`} className="text-sm">
+                <p>
+                  <span className="font-semibold">{i.title}</span>
+                  {i.codes.map((c) => (
+                    <span key={c} className="num ml-2 text-xs opacity-70">
+                      {c}
+                    </span>
+                  ))}
+                </p>
+                <p className="mt-0.5">{i.explain}</p>
+                {i.next && (
+                  <p className="mt-0.5 opacity-90">
+                    <span className="font-semibold">To resolve: </span>
+                    {i.next}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
       <Actions run={run} onChanged={onChanged} />
     </section>
@@ -191,10 +207,16 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
     }
   }
 
-  const primary = (a: ReviewAction) => a === "approve" || a === "confirm_link" || a === "replace_approved" || a === "retry";
+  // U05: the recommended action leads; with none, every option is shown alike and the reviewer decides.
+  const primary = (a: ReviewAction) => run.recommended?.action === a;
 
   return (
     <div className="mt-4 border-t border-current/20 pt-4">
+      {run.recommended && (
+        <p className="mb-2 text-sm">
+          <span className="font-semibold">Recommended: {ACTION_TEXT[run.recommended.action].label.toLowerCase()}.</span> {run.recommended.why}
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
         {run.actions.map((a) => (
           <button
@@ -225,7 +247,7 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
         <div className="mt-4 rounded-md border border-rule bg-surface p-3 text-ink">
           {run.correction_draft.send && run.correction_draft.to ? (
             <p className="text-sm text-ink-2">
-              Written by code from the findings above. <span className="font-semibold text-ink">Send email</span> delivers it to{" "}
+              Written by code from the holds the vendor can fix; checks on our side are not mentioned. <span className="font-semibold text-ink">Send email</span> delivers it to{" "}
               <span className="font-semibold text-ink">{run.correction_draft.to}</span> from {run.correction_draft.send.from}. The
               vendor&apos;s reply goes to {run.correction_draft.send.reply_to}, where the reference {run.correction_draft.token} links
               it to this invoice.
@@ -364,6 +386,111 @@ function Actions({ run, onChanged }: { run: RunDetail; onChanged: () => void }) 
       )}
     </div>
   );
+}
+
+/** Invoice lines against the PO they were checked against (audit U01): the numbers behind steps 7 and 8. */
+function PoTable({ table }: { table: PoTableView }) {
+  return (
+    <section aria-labelledby="po-h" className="rounded-md border border-rule bg-surface">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-rule px-4 py-3">
+        <h2 id="po-h" className="text-lg font-bold">
+          Invoice against <span className="num">{table.po_number}</span>
+        </h2>
+        <p className="text-sm text-ink-2">
+          {table.how_found}
+          {table.po_value ? `. PO value ${table.po_value}` : ""}
+          {table.po_status && table.po_status !== "open" ? ` (${table.po_status})` : ""}.
+        </p>
+      </div>
+      <p className="px-4 pt-2 text-xs text-ink-3">Prices are compared before GST, per PO unit.</p>
+      {/* Phones: one block per line. */}
+      <ul className="divide-y divide-rule sm:hidden">
+        {table.rows.map((r) => (
+          <li key={r.invoice_line} className="px-4 py-3 text-sm">
+            <div className="flex items-baseline justify-between gap-3">
+              <p className="min-w-0 break-words font-semibold">
+                <span className="num mr-1 text-ink-3">{r.invoice_line}</span>
+                {r.description}
+              </p>
+              <RowStatus r={r} />
+            </div>
+            <dl className="num mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-ink-2">
+              <dt className="text-ink-3">Billed</dt>
+              <dd>
+                {r.billed} = {r.amount}
+              </dd>
+              {r.po_line && (
+                <>
+                  <dt className="text-ink-3">PO line</dt>
+                  <dd className="break-words">{r.po_line}</dd>
+                </>
+              )}
+              {r.po_price && (
+                <>
+                  <dt className="text-ink-3">Price</dt>
+                  <dd>
+                    {r.invoice_price} vs {r.po_price} {r.price_diff && <span className={r.flags.includes("Price over") ? "font-semibold text-hold-fg" : ""}>({r.price_diff})</span>}
+                  </dd>
+                </>
+              )}
+              {r.quantity && (
+                <>
+                  <dt className="text-ink-3">Quantity</dt>
+                  <dd className={r.flags.includes("Quantity over") ? "font-semibold text-hold-fg" : ""}>{r.quantity}</dd>
+                </>
+              )}
+            </dl>
+            {r.matched_by && <p className="mt-1 text-xs text-graphite">{r.matched_by}</p>}
+          </li>
+        ))}
+      </ul>
+      <div className="hidden overflow-x-auto px-4 pb-3 sm:block">
+        <table className="mt-2 w-full min-w-[44rem] text-sm">
+          <thead className="border-b border-rule text-left text-ink-3">
+            <tr>
+              <th className="py-1 pr-3 font-normal">Invoice line</th>
+              <th className="py-1 pr-3 font-normal">Billed</th>
+              <th className="py-1 pr-3 font-normal">PO line</th>
+              <th className="py-1 pr-3 text-right font-normal">Invoice price</th>
+              <th className="py-1 pr-3 text-right font-normal">PO price</th>
+              <th className="py-1 pr-3 text-right font-normal">Quantity</th>
+              <th className="py-1 font-normal">Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((r) => (
+              <tr key={r.invoice_line} className={`border-b border-rule align-top last:border-b-0 ${r.flags.length ? "bg-hold-bg/60" : ""}`}>
+                <td className="py-2 pr-3">
+                  <span className="num mr-1 text-ink-3">{r.invoice_line}</span>
+                  {r.description}
+                  {r.matched_by && <span className="block text-xs text-graphite">{r.matched_by}</span>}
+                </td>
+                <td className="num py-2 pr-3 whitespace-nowrap">
+                  {r.billed}
+                  <span className="block text-ink-3">{r.amount}</span>
+                </td>
+                <td className="py-2 pr-3">{r.po_line ?? <span className="text-ink-3">none</span>}</td>
+                <td className={`num py-2 pr-3 text-right whitespace-nowrap ${r.flags.includes("Price over") ? "font-semibold text-hold-fg" : ""}`}>
+                  {r.invoice_price ?? <span className="text-ink-3">not compared</span>}
+                  {r.price_diff && <span className="block text-xs">{r.price_diff}</span>}
+                </td>
+                <td className="num py-2 pr-3 text-right whitespace-nowrap">{r.po_price ?? <span className="text-ink-3">none</span>}</td>
+                <td className={`num py-2 pr-3 text-right ${r.flags.includes("Quantity over") ? "font-semibold text-hold-fg" : ""}`}>{r.quantity ?? <span className="text-ink-3">not compared</span>}</td>
+                <td className="py-2">
+                  <RowStatus r={r} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function RowStatus({ r }: { r: PoTableView["rows"][number] }) {
+  if (r.flags.length) return <span className="text-sm font-semibold text-hold-fg">{r.flags.join("; ")}</span>;
+  return <span className="text-sm text-ok-fg">{r.ok_text ?? "Not compared"}</span>;
 }
 
 const STATUS_MARK: Record<StageView["status"], { text: string; cls: string }> = {

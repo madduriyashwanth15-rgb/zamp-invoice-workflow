@@ -1,4 +1,5 @@
-import type { ReferenceData } from "../engine/types";
+import type { ReasonCode } from "../codes";
+import type { Finding, ReferenceData } from "../engine/types";
 import type { RunRecord, StoreState } from "./types";
 
 // Read-side helpers shared by the app and tests. Pure: they only look at state.
@@ -24,6 +25,34 @@ export interface ActionOption {
   needsNote: boolean;
   /** Override of a known vendor's invoice with no PO found: the reviewer must name one of these open POs (C4b). */
   po_choices?: string[];
+}
+
+/**
+ * Holds a vendor can fix by sending a corrected invoice (spec v1.4, audit U03). The others are checks on our side
+ * (our reading, our records, a fraud signal to verify by phone): emailing the vendor about them is wrong, and for a
+ * changed bank account it would ask the possibly compromised sender to confirm their own change.
+ */
+const VENDOR_FIXABLE: ReadonlySet<ReasonCode> = new Set<ReasonCode>([
+  "PRICE_OVER_TOLERANCE", "QTY_EXCEEDS_PO", "PO_AMOUNT_EXCEEDED", "ARITHMETIC_MISMATCH", "TAX_BASIS_UNCLEAR", "TAX_RATE_MISMATCH",
+  "MISSING_REQUIRED_FIELD", "PO_NOT_FOUND", "PO_AMBIGUOUS", "PO_VENDOR_MISMATCH", "PO_CLOSED", "UNAPPROVED_CHARGE", "DATE_INVALID",
+  "SCAN_UNVERIFIED", "BUNDLED_QUANTITY_UNVERIFIED", "LINE_UNMAPPED", "UOM_UNSUPPORTED", "CLASSIFICATION_CONFLICT",
+]);
+
+/**
+ * A finding the vendor can fix. Not theirs: a bank account we failed to read (K4b); our reader disagreeing with a
+ * printed invoice title (G2; only G1b, a document that calls itself a quotation, is); and a rejected AI line
+ * proposal (it always comes with LINE_UNMAPPED or UOM_UNSUPPORTED on the same line, which are).
+ */
+export function vendorFixable(f: Pick<Finding, "code" | "evidence">): boolean {
+  if (f.code === "MISSING_REQUIRED_FIELD" && f.evidence.field === "bank account") return false;
+  if (f.code === "CLASSIFICATION_CONFLICT" && f.evidence.word == null) return false;
+  return VENDOR_FIXABLE.has(f.code);
+}
+
+/** True when a correction request makes sense: something the vendor can fix, an unreadable file, or a reviewer's hold. */
+export function vendorCanFix(run: RunRecord): boolean {
+  if (run.blocking_codes.includes("EXTRACTION_FAILED") || run.blocking_codes.includes("MANUAL_HOLD")) return true;
+  return (run.engine?.blocking ?? []).some(vendorFixable);
 }
 
 /** Why an override is not offered at all (spec v1.4): a credit note, or an invoice whose total was never read. */
@@ -60,7 +89,7 @@ export function availableActions(run: RunRecord, s: Pick<StoreState, "runs">, re
       if (only("POSSIBLE_DOUBLE_BILLING") && counterpart?.state === "APPROVED" && !counterpart.exported) {
         out.push({ action: "replace_approved", row: 17, needsNote: true });
       }
-      out.push({ action: "request_correction", row: 11, needsNote: false });
+      if (vendorCanFix(run)) out.push({ action: "request_correction", row: 11, needsNote: false });
       if (!d?.counterpart_exported && canOverride) out.push(override(9));
       out.push({ action: "reject", row: 10, needsNote: true });
       break;

@@ -12,7 +12,7 @@ function files(dir: string): string[] {
   });
 }
 
-const sources = [...files("src/ui"), ...files("src/app"), "src/lib/reason-text.ts", "src/server/views.ts"];
+const sources = [...files("src/ui"), ...files("src/app"), "src/lib/reason-text.ts", "src/server/views.ts", "src/server/explain.ts"];
 const code = (text: string) => text.split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
 
 describe("UI wording (spec 12)", () => {

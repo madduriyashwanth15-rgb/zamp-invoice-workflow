@@ -1,12 +1,14 @@
 import type { ReasonCode } from "@/domain/codes";
 import { REASON_CODES } from "@/domain/codes";
-import type { Finding, ReferenceData, StageStatus } from "@/domain/engine/types";
+import Decimal from "decimal.js";
+import type { Finding, LineMatch, ReferenceData, StageStatus } from "@/domain/engine/types";
 import { paiseToRupees } from "@/domain/money";
-import { availableActions, type ActionOption } from "@/domain/runs/queries";
+import { availableActions, vendorCanFix, type ActionOption } from "@/domain/runs/queries";
 import type { Approval, AuditEvent, CorrectionRequest, ExportRecord, Logs, RunRecord, StoreState, StoredDocument } from "@/domain/runs/types";
 import { nextToken } from "@/domain/runs/actions";
 import { formatDate, formatInr } from "@/lib/format";
 import { CODE_TEXT, STATE_TEXT, type Tone } from "@/lib/reason-text";
+import { holdNoteOf, issuesOf, readerName, recommendedAction, unitInr, vendorReasons, type ExplainContext, type IssueView, type Recommended } from "./explain";
 
 // JSON view models for the UI (no bigint, no internal objects). Presentation only: every value comes from the run.
 
@@ -76,6 +78,35 @@ export interface StageView {
   findings: FindingView[];
 }
 
+/** One invoice line set against the PO, formatted for the comparison table. Presentation only. */
+export interface PoRowView {
+  invoice_line: number;
+  description: string;
+  /** "100 pcs × ₹42.00", or "Lump sum" when there is no quantity. */
+  billed: string;
+  amount: string | null;
+  status: LineMatch["status"];
+  /** Blocking findings on this line, in short words ("Price over"); empty when the line is fine. */
+  flags: string[];
+  /** "Matches the PO", "Charge on the PO"... when there are no flags. */
+  ok_text: string | null;
+  po_line: string | null;
+  po_price: string | null;
+  invoice_price: string | null;
+  price_diff: string | null;
+  quantity: string | null;
+  /** Set when the line was matched by a proposal (AI or MOCK) that code verified. */
+  matched_by: string | null;
+}
+
+export interface PoTableView {
+  po_number: string;
+  po_status: string | null;
+  po_value: string | null;
+  how_found: string;
+  rows: PoRowView[];
+}
+
 export interface RunDetail extends RunSummary {
   failure: string | null;
   sender_email: string | null;
@@ -95,6 +126,12 @@ export interface RunDetail extends RunSummary {
   events: AuditEvent[];
   related: RunSummary[];
   token_active: string | null;
+  /** The holds in plain words with their figures, most severe first (audit U01). */
+  issues: IssueView[];
+  /** The action to lead with, or null when the next step is a person's judgement (audit U05). */
+  recommended: Recommended | null;
+  /** Invoice lines against the matched PO; null when no PO was matched or the run predates line matches. */
+  po_table: PoTableView | null;
   /** Correction email built by code from the run's own facts (spec 13); null when no correction can be requested. */
   correction_draft: {
     to: string | null;
@@ -163,7 +200,7 @@ const NOT_CHECKED_WHY: Record<string, string> = {
  * Engine notes are written for the audit trail ("K1: ...", "not evaluated: skipped at G1", "Outcome: ON_HOLD").
  * The screen shows the same facts in plain words, with the rule id kept separately (shown small).
  */
-export function plainNote(note: string): NoteView {
+export function plainNote(note: string, reader = "The AI"): NoteView {
   const m = /^([A-Z]\d+(?:[-/][A-Z]?\d+)*)( not evaluated)?:\s*(.*)$/s.exec(note);
   const rule = m ? m[1] : null;
   let text = m ? (m[2] ? `not evaluated: ${m[3]}` : m[3]) : note;
@@ -174,7 +211,7 @@ export function plainNote(note: string): NoteView {
   const due = /^Due \(per terms\): (\d{4}-\d{2}-\d{2}) \((\d+) days\)$/.exec(text);
   if (due) text = `Due (per terms): ${formatDate(due[1])}, ${due[2]} days after the invoice date`;
   const ai = /^AI doc_type: ([^;]*); title "([^"]*)"; number label "([^"]*)"$/.exec(text);
-  if (ai) text = `The AI read it as ${ai[1] === "invoice" ? "an invoice" : `a ${ai[1].replace(/_/g, " ")}`}${ai[2] ? `, titled "${ai[2]}"` : ""}${ai[3] ? `, number labelled "${ai[3]}"` : ""}`;
+  if (ai) text = `${reader} read it as ${ai[1] === "invoice" ? "an invoice" : `a ${ai[1].replace(/_/g, " ")}`}${ai[2] ? `, titled "${ai[2]}"` : ""}${ai[3] ? `, number labelled "${ai[3]}"` : ""}`;
   return { rule, text: text.charAt(0).toUpperCase() + text.slice(1) };
 }
 
@@ -187,6 +224,7 @@ function refsFor(runs: Map<string, RunRecord>) {
 }
 
 function stagesOf(run: RunRecord, named: (t: string) => string = (t) => t): StageView[] {
+  const reader = readerName(run);
   const intake: StageView = {
     n: 0, id: "intake", title: run.source === "email" ? "Received by email" : "Uploaded", by: "Code", by_ai: false, status: "passed", status_text: null,
     notes: (run.source === "email"
@@ -208,14 +246,17 @@ function stagesOf(run: RunRecord, named: (t: string) => string = (t) => t): Stag
     notes: [], findings: [],
   };
   if (run.extracted_by) {
-    read.notes.push(plain(run.extracted_by.cached ? "Answer reused from the cache (same file, prompt and model)" : `${run.extracted_by.attempts} provider call${run.extracted_by.attempts === 1 ? "" : "s"}`));
+    const mock = reader === "The MOCK reading";
+    read.notes.push(plain(mock ? "Values from the MOCK answer key for this test file; no AI was called"
+      : run.extracted_by.cached ? "Answer reused from the cache (same file, prompt and model)"
+      : `${run.extracted_by.attempts} call${run.extracted_by.attempts === 1 ? "" : "s"} to the model`));
     for (const r of run.extracted_by.retries ?? []) read.notes.push(plain(`Retried: ${r}`));
   }
   if (run.extraction) read.notes.push(plain(`Read as ${run.extraction.doc_type.replace(/_/g, " ")}, titled "${run.extraction.document_title ?? "no title"}"`));
   if (run.failure && !run.extraction) read.notes.push(plain(run.failure));
   if (run.blocking_codes.includes("EXTRACTION_FAILED") && !run.engine) {
     read.status = "held";
-    read.findings = [{ ...codeView("EXTRACTION_FAILED"), message: "The model's answer failed validation twice", evidence: [], line_no: null, blocking: true }];
+    read.findings = [{ ...codeView("EXTRACTION_FAILED"), message: `${reader === "The AI" ? "The model's" : `${reader}'s`} answer failed validation twice`, evidence: [], line_no: null, blocking: true }];
   }
   const out = [intake, read];
   if (!run.engine) return out;
@@ -225,7 +266,7 @@ function stagesOf(run: RunRecord, named: (t: string) => string = (t) => t): Stag
     out.push({
       n: ENGINE_STAGE_NO[st.stage], id: st.stage, title: ENGINE_TITLES[st.stage] ?? st.label,
       by: usedAi ? "Code (checked an AI line proposal)" : "Code", by_ai: false,
-      status: st.status, status_text: null, notes: st.notes.map((n) => plainNote(named(n))),
+      status: st.status, status_text: null, notes: st.notes.map((n) => plainNote(named(n), reader)),
       findings: st.findings.map((f) => {
         const v = findingView(f, blockingSet.has(`${f.code}|${f.stage}|${f.line_no ?? ""}|${f.message}`));
         return { ...v, message: named(v.message), evidence: v.evidence.map((e) => ({ ...e, value: named(e.value) })) };
@@ -261,8 +302,15 @@ const WAITING_NOTE: Partial<Record<RunRecord["state"], string>> = {
   FAILED: "A reviewer can retry reading it.",
 };
 
+/** Why a skipped run needs nothing (U12): the reason depends on what was skipped, not only "not an invoice". */
+const SKIP_WHY: Partial<Record<ReasonCode, string>> = {
+  NOT_INVOICE: "Not an invoice, so there is nothing to approve.",
+  UNSUPPORTED_FILE: "The file type or size is not supported, so nothing was read. The vendor has to send a PDF, PNG or JPEG under 4 MB.",
+  NO_ATTACHMENT: "The email had no attachment, so there is nothing to approve.",
+};
+
 const NOTHING_TO_DO: Partial<Record<RunRecord["state"], string>> = {
-  SKIPPED: "Not an invoice, so there is nothing to approve.",
+  SKIPPED: "Not processed as an invoice, so there is nothing to approve.",
   REJECTED: "Rejected by the checks, so there is nothing to approve.",
   SUPERSEDED: "Replaced by the vendor's corrected invoice, which is reviewed instead.",
   FAILED: "The file could not be fetched; the vendor has to send it again.",
@@ -292,7 +340,7 @@ export function reviewStage(run: RunRecord, events: AuditEvent[], actions: Actio
   } else {
     status = "not_needed";
     status_text = "No action needed";
-    notes.push(plain(NOTHING_TO_DO[run.state] ?? "Nothing for a reviewer to do."));
+    notes.push(plain((run.state === "SKIPPED" && run.primary_reason ? SKIP_WHY[run.primary_reason] : undefined) ?? NOTHING_TO_DO[run.state] ?? "Nothing for a reviewer to do."));
     if (actions.some((a) => a.action === "process_as_invoice")) notes.push(plain("If it is an invoice after all, a reviewer can process it as one."));
   }
   return { n: 10, id: "review", title: "Reviewer decision", by: "Person (demo identity)", by_ai: false, status, status_text, notes, findings: [] };
@@ -312,6 +360,7 @@ export function detail(run: RunRecord, state: Pick<StoreState, "runs" | "documen
   const token = [...state.tokens].find(([, id]) => id === run.run_id)?.[0] ?? null;
   const actions = availableActions(run, state, ref);
   const review = reviewStage(run, logs.events, actions);
+  const ctx = explainContext(run, state, ref, logs.events, actions);
   return {
     ...summarize(run, ref),
     failure: run.failure, sender_email: run.sender_email, uploader: run.uploader_display_name, subject: run.subject, reply_token: run.reply_token,
@@ -324,20 +373,77 @@ export function detail(run: RunRecord, state: Pick<StoreState, "runs" | "documen
     approvals: logs.approvals, corrections: logs.corrections, exports: logs.exports, events: logs.events,
     related: [...relatedIds].map((id) => state.runs.get(id)).filter((r): r is RunRecord => Boolean(r)).map((r) => summarize(r, ref)),
     token_active: run.state === "AWAITING_VENDOR" || run.state === "ON_HOLD" ? token : null,
-    correction_draft: run.state === "ON_HOLD" ? { ...correctionDraft(run, nextToken(state, run), ref), send: null } : null,
+    issues: issuesOf(ctx),
+    recommended: recommendedAction(run, actions),
+    po_table: poTable(run, ref),
+    correction_draft: run.state === "ON_HOLD" && vendorCanFix(run) ? { ...correctionDraft(run, nextToken(state, run), ref, ctx.holdNote), send: null } : null,
+  };
+}
+
+/** Everything the explanations need from the store, gathered once. */
+export function explainContext(
+  run: RunRecord, state: Pick<StoreState, "runs">, ref: ReferenceData, events: AuditEvent[], actions?: ActionOption[],
+): ExplainContext {
+  const refOf = (id: string) => state.runs.get(id)?.ref ?? id;
+  const disputedBy = [...state.runs.values()].filter((r) => r.run_id !== run.run_id && r.engine?.dispute?.counterpart_run_id === run.run_id && (r.state === "ON_HOLD" || r.state === "AWAITING_VENDOR"));
+  return { run, ref, refOf, disputedBy, holdNote: holdNoteOf(events), actions };
+}
+
+const FLAG: Partial<Record<ReasonCode, string>> = {
+  PRICE_OVER_TOLERANCE: "Price over", QTY_EXCEEDS_PO: "Quantity over", TAX_RATE_MISMATCH: "GST rate differs", UNAPPROVED_CHARGE: "Charge not approved",
+  LINE_UNMAPPED: "Not matched", UOM_UNSUPPORTED: "Unit not verified", AI_PROPOSAL_REJECTED: "Proposed match rejected",
+  BUNDLED_QUANTITY_UNVERIFIED: "Lump sum: quantity not checked", PO_AMOUNT_EXCEEDED: "Over the PO value",
+};
+
+/** The invoice-against-PO table (audit U01): from the engine's line matches, so it shows what the checks compared. */
+export function poTable(run: RunRecord, ref: ReferenceData): PoTableView | null {
+  const rows = run.engine?.line_matches;
+  if (!run.po_number || !rows?.length) return null;
+  const po = ref.purchaseOrders.find((p) => p.po_number === run.po_number);
+  const blocking = run.engine?.blocking ?? [];
+  const proposer = readerName(run) === "The AI" ? "AI proposal" : readerName(run) === "The MOCK reading" ? "MOCK proposal" : "Proposal";
+  return {
+    po_number: run.po_number,
+    po_status: po?.status ?? null,
+    po_value: po ? `${fmtRupees(po.subtotal_pretax)} before GST` : null,
+    how_found: run.engine?.po_match_method === "inferred" ? "No PO was printed; this is the only open PO on which every line matches" : "The PO printed on the invoice",
+    rows: rows.map((m) => {
+      const flags = [...new Set(blocking.filter((f) => f.line_no === m.invoice_line).map((f) => FLAG[f.code] ?? CODE_TEXT[f.code]?.title ?? f.code))];
+      const already = m.already_billed ? new Decimal(m.already_billed) : null;
+      const diff = m.price_diff_pct ? new Decimal(m.price_diff_pct) : null;
+      return {
+        invoice_line: m.invoice_line,
+        description: m.description,
+        billed: m.qty != null ? `${m.qty} ${m.uom ?? ""} × ${unitInr(m.unit_price)}`.replace(/\s+×/, " ×") : "Lump sum",
+        amount: formatInr(m.amount),
+        status: m.status,
+        flags,
+        ok_text: flags.length ? null
+          : m.status === "charge" ? "Charge on the PO"
+          : m.price_result === "below" ? "Below the PO price"
+          : m.status === "matched" ? "Matches the PO" : null,
+        po_line: m.po_line != null ? `${m.po_line}. ${m.po_description ?? ""}`.trim() : null,
+        po_price: m.po_unit_price ? `${unitInr(m.po_unit_price)} / ${m.po_uom}` : null,
+        invoice_price: m.price_per_po_unit ? `${unitInr(m.price_per_po_unit)} / ${m.po_uom}` : null,
+        price_diff: diff ? `${diff.gt(0) ? "+" : ""}${diff.toString()}%` : null,
+        quantity: m.base_qty && m.ordered ? `${new Decimal(m.base_qty).toString()} billed${already?.gt(0) ? ` + ${already.toString()} before` : ""}, ${m.ordered} ordered` : null,
+        matched_by: m.via && /^M2/.test(m.via) ? `${proposer}, verified by code` : null,
+      };
+    }),
   };
 }
 
 /** The correction email, written by code from the run's own findings (spec 13). No AI wording. */
-export function correctionDraft(run: RunRecord, token: string, ref: ReferenceData): { to: string | null; subject: string; body: string; token: string } {
+export function correctionDraft(run: RunRecord, token: string, ref: ReferenceData, holdNote: string | null = null): { to: string | null; subject: string; body: string; token: string } {
   const vendor = run.vendor_id ? ref.vendors.find((v) => v.vendor_id === run.vendor_id) : undefined;
   const number = run.extraction?.invoice_number ?? "(no number)";
-  const reasons = (run.engine?.blocking ?? []).map((f) => `- ${f.message}`);
+  // Only what the vendor can fix, in plain words (audit U03); our own checks (bank account, sender) never go out.
+  const reasons = vendorReasons({ run, ref, refOf: (id) => id, holdNote }).map((r) => `- ${r}`);
   const lines = [
     `Dear ${vendor?.legal_name ?? run.extraction?.vendor_name ?? "Sir or Madam"},`,
     "",
     `We have put your invoice ${number}${run.invoice_date ? ` dated ${formatDate(run.invoice_date)}` : ""}${run.total_paise != null ? ` for ${formatInr(paiseToRupees(run.total_paise))}` : ""} on hold for the following reason${reasons.length === 1 ? "" : "s"}:`,
-    ...(reasons.length ? reasons : ["- " + (run.primary_reason ? CODE_TEXT[run.primary_reason].title : "it needs a correction")]),
+    ...(reasons.length ? reasons : ["- It needs a correction before it can go on our payment list."]),
     "",
     `Please reply to this email with a corrected invoice. Keep the reference [Ref ${token}] in the subject so we can match your reply to this invoice.`,
     "",

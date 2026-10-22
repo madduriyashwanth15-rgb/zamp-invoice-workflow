@@ -136,6 +136,33 @@ export interface DisputeLink {
   counterpart_exported: boolean;
 }
 
+/** One invoice line set against the PO: how it was matched and what the comparison found. Decides nothing. */
+export interface LineMatch {
+  invoice_line: number;
+  description: string;
+  qty: string | null;
+  uom: string | null;
+  unit_price: string | null;
+  amount: string;
+  /** matched: compared on price and quantity; charge: accepted against a PO charge line; held: not compared. */
+  status: "matched" | "charge" | "lump_sum" | "held";
+  hold_code?: ReasonCode;
+  po_line: number | null;
+  po_description: string | null;
+  po_uom: string | null;
+  /** PO pre-tax price per PO unit. */
+  po_unit_price: string | null;
+  ordered: string | null;
+  via: string | null;
+  /** Invoice quantity in PO units, and the invoice's pre-tax price per PO unit. */
+  base_qty: string | null;
+  price_per_po_unit: string | null;
+  price_diff_pct: string | null;
+  price_result: "within" | "over" | "below" | null;
+  already_billed: string | null;
+  qty_result: "within" | "over" | null;
+}
+
 export interface EngineResult {
   outcome: Outcome;
   blocking: Finding[];
@@ -153,6 +180,8 @@ export interface EngineResult {
   due_date: string | null;
   /** Counted only once the run is CLEARED or APPROVED. */
   consumption: ConsumptionEntry[];
+  /** Each invoice line against the PO (stages 7-8), for the reviewer's table. Absent on runs decided before v1.4. */
+  line_matches?: LineMatch[];
   correction: CorrectionLink | null;
   dispute: DisputeLink | null;
 }

@@ -148,7 +148,7 @@ States: RECEIVED, PROCESSING, SKIPPED, CLEARED, ON_HOLD, AWAITING_VENDOR, APPROV
 | 8 | CLEARED | ON_HOLD | RELATED_INVOICE_DISPUTE (D3) | system | no | consumption released |
 | 9 | ON_HOLD | APPROVED | override | user | yes | C2/C3 re-run (second confirmation if failing); P9 and P9b; C4b (PO named when none was found); blocked if the counterpart in D3 is exported; never supersedes |
 | 10 | ON_HOLD | REJECTED | reject | user | yes | |
-| 11 | ON_HOLD | AWAITING_VENDOR | correction email sent or marked sent manually | user | no | token issued and logged |
+| 11 | ON_HOLD | AWAITING_VENDOR | correction email sent or marked sent manually; only when a hold is one the vendor can fix (v1.4, section 18) | user | no | token issued and logged |
 | 12 | AWAITING_VENDOR | ON_HOLD | vendor reply held (D2) | system | no | |
 | 13 | AWAITING_VENDOR | ON_HOLD | stop waiting | user | yes | |
 | 14 | AWAITING_VENDOR | APPROVED / REJECTED | reviewer decision | user | yes | as row 9 for APPROVED |
@@ -253,3 +253,4 @@ Decided by the owner on 23 Oct 2026 (audit decisions Q1-Q11). Rows marked implem
 | Bank, vendor and sender overrides need a callback record and a second confirmation | Row 9 | Q9 | Pending |
 | Undoing an approval before export | Section 11 | Q10 | Deferred |
 | Demo reset requires DEMO_ADMIN_KEY | Demo tools | Q5 | Implemented (a92657f) |
+| A correction request is offered only when a hold is one the vendor can fix, and the email lists only those, in plain words without rule codes. Not offered for bank account, sender, vendor-master, duplicate or correction-link holds, an unread bank account (K4b), values not found in the text (V3) or our reader disagreeing with an invoice title (G2): those are checks on our side, and for a changed bank account the email would ask the possibly compromised sender to confirm their own change | Row 11, section 13 | Audit U03 (safer default, flagged to the owner) | Implemented (section 11) |

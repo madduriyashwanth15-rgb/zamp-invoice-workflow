@@ -6,7 +6,9 @@ import { normInvoiceNumber, normText } from "../normalise";
 import type { ReferenceData } from "../engine/types";
 import { markCorrectionSent, nextToken } from "./actions";
 import { processRun, type PipelineDeps } from "./pipeline";
-import { overrideBlockedReason, poChoices } from "./queries";
+import { overrideBlockedReason, poChoices, vendorCanFix } from "./queries";
+
+const NOTHING_FOR_VENDOR = "Nothing on this invoice is for the vendor to correct: these holds are checks on our side (for a changed bank account, call the vendor on the master number)";
 import { pushEvent, transition, TransitionRefused } from "./state-machine";
 import type { Approval, ExportRecord, RunRecord, StoreState } from "./types";
 
@@ -268,6 +270,7 @@ export async function requestCorrection(
     guardIdentity(ctx.actor);
     const value = await markCorrectionSent(deps, runId, ctx.actor, ctx.channel ?? "sent", (tx) => {
       const run = getRun(tx, runId, ctx);
+      if (run.state === "ON_HOLD" && !vendorCanFix(run)) throw new Refusal("INVALID_TRANSITION_BLOCKED", NOTHING_FOR_VENDOR);
       if (ctx.expectToken && nextToken(tx, run) !== ctx.expectToken) {
         throw new Refusal("ACTION_REPEAT_IGNORED", `another correction request was recorded for ${run.ref} in the meantime`);
       }
@@ -288,6 +291,7 @@ export async function prepareCorrection(deps: Deps, runId: string, ctx: ActionCt
     const value = await deps.store.read((s) => {
       const run = getRun(s, runId, ctx);
       if (run.state !== "ON_HOLD") throw new Refusal("INVALID_TRANSITION_BLOCKED", `A correction request needs a held invoice; ${run.ref} is ${run.state}`);
+      if (!vendorCanFix(run)) throw new Refusal("INVALID_TRANSITION_BLOCKED", NOTHING_FOR_VENDOR);
       return { run, token: nextToken(s, run) };
     });
     return { ok: true, value };

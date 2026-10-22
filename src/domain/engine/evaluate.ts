@@ -10,7 +10,7 @@ import { assessArithmetic } from "./arithmetic";
 import { m1Map, printedPackSize, proposalSupport, verifyUnits } from "./mapping";
 import {
   STAGE_LABELS, type ConsumptionEntry, type CorrectionLink, type DisputeLink, type EngineInput, type EngineResult,
-  type EvidenceValue, type Finding, type Outcome, type PriorRun, type StageId, type StageResult,
+  type EvidenceValue, type Finding, type LineMatch, type Outcome, type PriorRun, type StageId, type StageResult,
 } from "./types";
 
 // Stages 2-9 of spec section 3, as one pure, deterministic function (apart from the injected M2 proposer).
@@ -380,7 +380,12 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
   // C4b (spec v1.4): a held line still has a PO. Its pre-tax amount is recorded at PO level (line 0, no quantity),
   // like a lump-sum line. Consumption only counts once the run is CLEARED or APPROVED, so this matters only when a
   // person approves the invoice by override: the PO is then used up and a later invoice cannot clear against it too.
-  const heldAtPoLevel = (line: ExtractionLine) => consumption.push({ po_number: po.po_number, line_no: 0, base_qty: "0", amount_paise: preTaxPaise(line, basis) });
+  const matches: LineMatch[] = [];
+  const poLineOf = (n: number | null | undefined) => (n == null ? undefined : po.lines.find((pl) => pl.line_no === n));
+  const heldAtPoLevel = (line: ExtractionLine, code: ReasonCode, poLineNo?: number) => {
+    consumption.push({ po_number: po.po_number, line_no: 0, base_qty: "0", amount_paise: preTaxPaise(line, basis) });
+    matches.push(lineMatch(line, poLineOf(poLineNo), "held", code));
+  };
 
   for (const line of ex.lines) {
     const keywords = matchedChargeKeywords(line.description, s);
@@ -391,17 +396,18 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
         t.add("UNAPPROVED_CHARGE", `Charge line "${line.description}" has no matching charge line on ${po.po_number} (M7)`, {
           keywords, amount: r(amount), po_charge_lines: po.lines.filter((pl) => pl.line_kind === "charge").map((pl) => pl.description),
         }, line.line_no);
-        heldAtPoLevel(line);
+        heldAtPoLevel(line, "UNAPPROVED_CHARGE");
       } else {
         const already = chargeLineAmountConsumed(priorRuns, po.po_number, poCharge.line_no, excludeFromConsumption);
         if (exceedsCap(amount + already, poCharge.line_amount_pretax, tol)) {
           t.add("UNAPPROVED_CHARGE", `Charge exceeds the PO charge line by more than ${tol}% (M7)`, {
             keywords, amount: r(amount), already_billed: r(already), po_amount: r(poCharge.line_amount_pretax),
           }, line.line_no);
-          heldAtPoLevel(line);
+          heldAtPoLevel(line, "UNAPPROVED_CHARGE", poCharge.line_no);
         } else {
           t.note(`M7: line ${line.line_no} "${line.description}" accepted against PO charge line ${poCharge.line_no}`);
           consumption.push({ po_number: po.po_number, line_no: poCharge.line_no, base_qty: "1", amount_paise: amount });
+          matches.push(lineMatch(line, poCharge, "charge"));
         }
       }
       continue;
@@ -418,6 +424,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
       // A lump-sum line is always held, but if a reviewer approves the invoice it uses up that much of the PO
       // amount (line 0 = PO level, no quantity), so a later invoice for the same work cannot clear against it too.
       consumption.push({ po_number: po.po_number, line_no: 0, base_qty: "0", amount_paise: amount });
+      matches.push(lineMatch(line, undefined, "lump_sum", code));
       continue;
     }
     let poLine = m1Map(line, po);
@@ -430,7 +437,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
         t.add("UOM_UNSUPPORTED", `Line ${line.line_no} maps to PO line ${poLine.line_no} but the unit cannot be verified (M3)`, {
           invoice_unit: line.uom, po_unit: poLine.uom, reason: u.ok ? `printed pack size ${printed} differs from catalog ${u.factor}` : u.reason,
         }, line.line_no);
-        heldAtPoLevel(line);
+        heldAtPoLevel(line, "UOM_UNSUPPORTED", poLine.line_no);
         continue;
       }
       factor = u.factor;
@@ -442,7 +449,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
         t.add("LINE_UNMAPPED", `Line ${line.line_no} "${line.description}" matches no PO line (M1), and the AI proposed none (M2)`, {
           description: line.description, po: po.po_number, proposer: proposal?.by ?? input.proposer.label, proposal: proposal?.justification ?? null,
         }, line.line_no);
-        heldAtPoLevel(line);
+        heldAtPoLevel(line, "LINE_UNMAPPED");
         continue;
       }
       const u = verifyUnits(line.uom, target, ref.catalog);
@@ -454,7 +461,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
           printed_pack_size: printed, reason: u.ok ? `pack size: printed ${printed}, AI read ${proposal.pack_size_read}, catalog ${u.factor}` : u.reason,
         }, line.line_no);
         t.add("UOM_UNSUPPORTED", `Line ${line.line_no}: unit conversion not verified (M3)`, { invoice_unit: line.uom, po_unit: target.uom }, line.line_no);
-        heldAtPoLevel(line);
+        heldAtPoLevel(line, "AI_PROPOSAL_REJECTED", target.line_no);
         continue;
       }
       const support = proposalSupport(line, target, ref.catalog, u.via === "catalog pack" && printed === u.factor && proposal.pack_size_read === u.factor);
@@ -465,7 +472,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
         t.add("LINE_UNMAPPED", `Line ${line.line_no} "${line.description}" is not matched to ${po.po_number}: the AI proposal was rejected (M3)`, {
           description: line.description, po: po.po_number,
         }, line.line_no);
-        heldAtPoLevel(line);
+        heldAtPoLevel(line, "AI_PROPOSAL_REJECTED", target.line_no);
         continue;
       }
       poLine = target;
@@ -478,7 +485,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
       t.add("LINE_UNMAPPED", `Line ${line.line_no} "${line.description}" matches no PO line (M1); no AI mapping available`, {
         description: line.description, po: po.po_number, possible_charge: line.qty == null && line.uom == null,
       }, line.line_no);
-      heldAtPoLevel(line);
+      heldAtPoLevel(line, "LINE_UNMAPPED");
       continue;
     }
     const earlier = used.get(poLine.line_no);
@@ -486,7 +493,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
       t.add("LINE_UNMAPPED", `Line ${line.line_no} maps to PO line ${poLine.line_no}, already matched by invoice line ${earlier} (M4)`, {
         po_line: poLine.line_no, earlier_invoice_line: earlier,
       }, line.line_no);
-      heldAtPoLevel(line);
+      heldAtPoLevel(line, "LINE_UNMAPPED", poLine.line_no);
       continue;
     }
     used.set(poLine.line_no, line.line_no);
@@ -505,6 +512,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
     const { line, poLine } = m;
     if (line.unit_price == null || line.qty == null) {
       t.add("LINE_UNMAPPED", `Line ${line.line_no} has no quantity or unit price to compare`, { po_line: poLine.line_no }, line.line_no);
+      matches.push(lineMatch(line, poLine, "held", "LINE_UNMAPPED"));
       continue;
     }
     const verdict = c1Compare(line.unit_price, poLine.unit_price_pretax, basis, line.gst_rate ?? 0, m.factor, tol);
@@ -525,7 +533,13 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
     }
     mappedAmount += m.preTax;
     consumption.push({ po_number: po.po_number, line_no: poLine.line_no, base_qty: m.baseQty.toString(), amount_paise: m.preTax });
+    matches.push({
+      ...lineMatch(line, poLine, "matched"),
+      via: m.via, base_qty: m.baseQty.toString(), price_per_po_unit: basePrice.toDecimalPlaces(4).toString(), price_diff_pct: pct, price_result: verdict,
+      already_billed: already.toString(), qty_result: m.baseQty.plus(already).gt(cap) ? "over" : "within",
+    });
   }
+  result.line_matches = [...matches].sort((a, b) => a.invoice_line - b.invoice_line);
   if (mapped.length > 0 && exceedsCap(mappedAmount + consumed.amount, po.subtotal_pretax, tol)) {
     t.add("PO_AMOUNT_EXCEEDED", `Invoiced plus already billed exceeds ${po.po_number} by more than ${tol}% (C3)`, {
       invoiced_pretax: r(mappedAmount), already_billed: r(consumed.amount), po_subtotal: r(po.subtotal_pretax),
@@ -540,6 +554,16 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
   }
   result.consumption = consumption;
   return decide(t, result, input);
+}
+
+/** One invoice line set against the PO, for the reviewer's comparison table. Presentation only: it decides nothing. */
+function lineMatch(line: ExtractionLine, pl: PoLine | undefined, status: LineMatch["status"], code?: ReasonCode): LineMatch {
+  return {
+    invoice_line: line.line_no, description: line.description, qty: line.qty, uom: line.uom, unit_price: line.unit_price, amount: line.amount,
+    status, ...(code ? { hold_code: code } : {}),
+    po_line: pl?.line_no ?? null, po_description: pl?.description ?? null, po_uom: pl?.uom ?? null, po_unit_price: pl?.unit_price_pretax ?? null,
+    ordered: pl?.qty_ordered ?? null, via: null, base_qty: null, price_per_po_unit: null, price_diff_pct: null, price_result: null, already_billed: null, qty_result: null,
+  };
 }
 
 /**
