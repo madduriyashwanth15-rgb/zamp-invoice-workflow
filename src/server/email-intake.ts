@@ -39,6 +39,15 @@ export async function ingestEmail(
   for (let i = 0; i < email.attachments.length; i++) {
     const att = email.attachments[i];
     const attachmentId = i === 0 ? email.attachment_id : `${email.attachment_id}#${i}`;
+    // A file the provider reports as too large is recorded without downloading it (audit B03).
+    if (att.size_bytes != null) {
+      const early = triageEmail(email, [{ filename: att.filename, content_type: att.content_type, size_bytes: att.size_bytes }]).attachments[0];
+      if (early.kind === "skip") {
+        const run = await receiveUnreadable(deps, { ...base, attachment_id: attachmentId, filename: att.filename, content_type: att.content_type, size_bytes: att.size_bytes }, "UNSUPPORTED_FILE", early.reason);
+        out.run_ids.push(run.run_id);
+        continue;
+      }
+    }
     let bytes: Uint8Array | null = null;
     let lastError = "";
     for (let a = 1; a <= FETCH_ATTEMPTS && !bytes; a++) {

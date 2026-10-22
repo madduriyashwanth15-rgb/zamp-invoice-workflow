@@ -101,3 +101,26 @@ describe("handleReceived", () => {
     expect(runs[0].failure).toMatch(/after 3 attempts: 503/);
   });
 });
+
+describe("ResendClient: limits on what is fetched (audit B03)", () => {
+  it("an attachment the provider lists as over 4 MB is recorded as unsupported without being downloaded", async () => {
+    const urls: string[] = [];
+    const signals: (AbortSignal | undefined)[] = [];
+    const client = new ResendClient("re_test", "https://api.resend.com", (async (url: string, init?: RequestInit) => {
+      urls.push(url);
+      signals.push(init?.signal ?? undefined);
+      if (url.endsWith("/emails/receiving/e3")) return Response.json({ id: "e3", from: "billing@freshpack.example", to: ["ap@in.example"], subject: "Invoice", text: "", html: null });
+      if (url.endsWith("/emails/receiving/e3/attachments")) {
+        return Response.json({ object: "list", has_more: false, data: [{ id: "big", filename: "scan.pdf", content_type: "application/pdf", size: 10 * 1024 * 1024, download_url: "https://files.example/big", expires_at: "2026-10-22T10:00:00Z" }] });
+      }
+      return new Response("should not be fetched", { status: 500 });
+    }) as unknown as typeof fetch);
+    const { email, fetchBytes } = await client.load("e3");
+    const deps = makeDeps();
+    const r = await ingestEmail(deps, email, fetchBytes);
+    const run = await deps.store.read((s) => s.runs.get(r.run_ids[0])!);
+    expect([run.state, run.primary_reason]).toEqual(["SKIPPED", "UNSUPPORTED_FILE"]);
+    expect(urls).not.toContain("https://files.example/big");
+    expect(signals.every((s) => s instanceof AbortSignal)).toBe(true);
+  });
+});

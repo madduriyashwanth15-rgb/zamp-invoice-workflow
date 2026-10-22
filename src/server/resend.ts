@@ -47,13 +47,16 @@ interface AttachmentList {
   data: { id: string; filename: string; content_type: string; content_disposition?: string | null; size: number; download_url: string; expires_at: string }[];
 }
 
+/** Each call to Resend (email, attachment list, attachment download) is abandoned after this long (audit B03). */
+export const FETCH_TIMEOUT_MS = 20_000;
+
 export class ResendClient {
   constructor(private apiKey: string, private base = "https://api.resend.com", private fetchImpl: typeof fetch = fetch) {
     if (!apiKey) throw new Error("RESEND_API_KEY is not set");
   }
 
   private async get<T>(path: string): Promise<T> {
-    const res = await this.fetchImpl(`${this.base}${path}`, { headers: { Authorization: `Bearer ${this.apiKey}` } });
+    const res = await this.fetchImpl(`${this.base}${path}`, { headers: { Authorization: `Bearer ${this.apiKey}` }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`Resend ${path} answered ${res.status}: ${(await res.text()).slice(0, 200)}`);
     return (await res.json()) as T;
   }
@@ -74,12 +77,12 @@ export class ResendClient {
       to: e.to,
       subject: e.subject ?? "",
       body_text: e.text ?? (e.html ? e.html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ") : ""),
-      attachments: atts.map((a) => ({ filename: a.filename, path: "", content_type: a.content_type })),
+      attachments: atts.map((a) => ({ filename: a.filename, path: "", content_type: a.content_type, size_bytes: a.size })),
       // DMARC pass = trusted From; fail = possible spoof (held as SENDER_UNVERIFIED, never links); otherwise unknown.
       sender_authenticated: e.authentication?.dmarc === "pass" ? true : e.authentication?.dmarc === "fail" ? false : null,
     };
     const fetchBytes = async (i: number) => {
-      const res = await this.fetchImpl(atts[i].download_url);
+      const res = await this.fetchImpl(atts[i].download_url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       if (!res.ok) throw new Error(`attachment download answered ${res.status}`);
       return new Uint8Array(await res.arrayBuffer());
     };

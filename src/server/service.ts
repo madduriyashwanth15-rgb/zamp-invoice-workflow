@@ -115,6 +115,16 @@ export async function exportNow(actor: string) {
   return r.ok ? { ok: true as const, export_id: r.value.record.export_id, count: r.value.runs.length } : r;
 }
 
+/**
+ * One CSV cell: quoted, quotes doubled, and a leading = + - @ tab or CR neutralised with an apostrophe so a
+ * spreadsheet shows it as text instead of running it as a formula (audit A09). Totals never start with these.
+ */
+export function csvCell(v: string | null | undefined): string {
+  const s = String(v ?? "");
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return `"${safe.replace(/"/g, '""')}"`;
+}
+
 /** CSV of one export (the payment list handed to finance). Amounts as printed totals in rupees. */
 export async function exportCsv(exportId: string): Promise<string | null> {
   const { deps } = runtime();
@@ -123,7 +133,7 @@ export async function exportCsv(exportId: string): Promise<string | null> {
   if (!x) return null;
   const runs = await deps.store.read((s) => x.run_ids.map((id) => s.runs.get(id)!));
   const approvals = logs.approvals;
-  const esc = (v: string | null | undefined) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const esc = csvCell;
   const header = ["export_id", "exported_by_demo_identity", "exported_at", "run_ref", "vendor_id", "vendor", "invoice_number", "invoice_date", "po_number", "total_inr", "due_per_terms", "approved_by_demo_identity", "approved_at", "approval_mode"];
   const rows = runs.map((r) => {
     const v = deps.reference.vendors.find((x) => x.vendor_id === r.vendor_id);

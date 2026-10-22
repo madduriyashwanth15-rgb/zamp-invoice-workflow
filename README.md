@@ -91,7 +91,12 @@ matrix pass rule; it must also agree with the independent oracle (`oracle_result
 
 ## Assumptions and limitations
 
-- Text-layer evidence only: scans and photos are always held for a human check (SCAN_UNVERIFIED).
+- Text-layer evidence only: scans and photos with no text layer are always held for a human check (SCAN_UNVERIFIED).
+  A scanned PDF that already carries an OCR text layer is treated like a digital PDF, and its values are checked
+  against that text.
+- PDF limits: at most 50 pages and 200,000 characters of text are read, within 15 s; a larger or slower file is
+  recorded as unsupported, and text past the character limit is not used (a value printed there fails V3 and holds).
+  Attachments the email provider reports as over 4 MB are not downloaded.
 - INR only. GST is checked for consistency, not for tax law. Unit conversions only through the catalog.
 - Lump-sum lines are recognised only by explicit markers and always held. Credit notes and discounts are not processed.
 - Charge wording outside the keyword list ends as LINE_UNMAPPED (still held).

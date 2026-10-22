@@ -68,7 +68,8 @@ export interface InboundEmail {
   to: string[];
   subject: string;
   body_text: string;
-  attachments: { filename: string; path: string; content_type: string }[];
+  /** size_bytes: as the email provider reports it before download, when known (oversized files are not fetched). */
+  attachments: { filename: string; path: string; content_type: string; size_bytes?: number }[];
   /** DMARC result when the provider reports it (false = failed). Recorded test emails carry none. */
   sender_authenticated?: boolean | null;
 }
