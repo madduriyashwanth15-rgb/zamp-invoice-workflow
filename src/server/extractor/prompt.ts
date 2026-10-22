@@ -2,7 +2,7 @@ import type { Settings } from "@/domain/types";
 
 // Versioned prompts (spec 14). Bump the version whenever the text changes: it is part of the cache key.
 
-export const EXTRACTION_PROMPT_VERSION = "extract-v1";
+export const EXTRACTION_PROMPT_VERSION = "extract-v2";
 export const MAPPING_PROMPT_VERSION = "map-v1";
 
 export function extractionPrompt(settings: Settings): string {
@@ -30,7 +30,8 @@ Return exactly this JSON object:
                "amount": decimal string, "gst_rate": decimal fraction string such as "0.18" for 18% (CGST 9% + SGST 9%), "0" if no tax, or null } ],
   "subtotal": decimal string or null (for inclusive documents: the taxable value),
   "cgst": decimal string or null, "sgst": decimal string or null, "igst": decimal string or null,
-  "tax_total": decimal string or null (total GST),
+  "tax_total": the total GST only if it is printed as its own line (e.g. "Total GST", "Total Tax"), else null.
+               Do not add CGST and SGST yourself,
   "total": the grand total as printed, decimal string or null,
   "bank_account_last4": the LAST 4 digits of the printed bank account number, or null if no account is printed,
   "revision_marker": true if the document is marked revised or corrected, else false,

@@ -6,6 +6,7 @@ import { failStuckRuns, ingest, receive, receiveUnreadable, type ExtractionAttem
 import { approve, confirmCorrectionLink, exportApproved, overrideApprove, reject, requestCorrection, retry, stopWaiting } from "@/domain/runs/review";
 import { loadEmail, TEST_DATA_DIR } from "@/fixtures/load";
 import { ingestEmail } from "@/server/email-intake";
+import { withTaxTotal } from "@/server/extractor/gemini-extractor";
 import { extractionOf, textFrom } from "./support/direct";
 import { AnswerKeyExtractor, deliver, makeDeps, reference } from "./support/harness";
 
@@ -200,5 +201,27 @@ describe("sender authentication and tokens", () => {
     expect(tb).toMatch(/^R-T\d{4}[0-9A-Z]{4}$/);
     expect(tb).not.toBe(ta);
     expect(await deps.store.read((s) => [s.tokens.get(ta), s.tokens.get(tb)])).toEqual([s3.run_id, s3.run_id]);
+  });
+});
+
+describe("live run, 22 Oct: invoices that print only CGST and SGST (no tax total line)", () => {
+  it("the printed components are still checked: a wrong CGST with no tax total is ARITHMETIC_MISMATCH", async () => {
+    const { send } = setup();
+    const e = extractionOf("S1");
+    e.tax_total = null;
+    const ok = await send("s1-no-total.pdf", structuredClone(e));
+    expect(ok.state).toBe("CLEARED");
+    const bad = structuredClone(e);
+    bad.invoice_number = "FP-2026-0499";
+    bad.cgst = "1540.00";
+    const held = await send("s1-bad-cgst.pdf", bad);
+    expect(held.blocking_codes).toContain("ARITHMETIC_MISMATCH");
+  });
+
+  it("the extractor fills a missing tax total by adding the printed components, and keeps a printed one", () => {
+    const e = extractionOf("S14");
+    expect(withTaxTotal({ ...e, tax_total: null }).tax_total).toBe("2340.00");
+    expect(withTaxTotal({ ...e, tax_total: "2340.00", cgst: null, sgst: null }).tax_total).toBe("2340.00");
+    expect(withTaxTotal({ ...e, tax_total: null, cgst: null, sgst: null, igst: null }).tax_total).toBeNull();
   });
 });

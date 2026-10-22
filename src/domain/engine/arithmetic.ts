@@ -53,9 +53,12 @@ export function checkBasis(ex: Extraction, basis: PriceBasis, tol: Paise): Basis
   const checks = lineChecks(ex, tol);
   const lines = sumLines(ex);
   const subtotal = p(ex.subtotal);
-  const tax = p(ex.tax_total);
   const total = p(ex.total);
   const components = zero(p(ex.cgst)) + zero(p(ex.sgst)) + zero(p(ex.igst ?? null));
+  // Many invoices print only CGST and SGST (or IGST) lines and no separate tax total: then the printed tax is
+  // their sum, so the printed components are still checked against the rates and the total.
+  const componentsPrinted = [ex.cgst, ex.sgst, ex.igst].some((v) => v != null);
+  const tax = p(ex.tax_total) ?? (componentsPrinted ? components : null);
 
   if (basis === "exclusive") {
     if (subtotal != null) checks.push(cmp("sum of lines = subtotal", lines, subtotal, tol));

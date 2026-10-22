@@ -1,0 +1,85 @@
+{
+  "at": "2026-10-22T04:41:35.302Z",
+  "model": "gemini-3.8-flash",
+  "results": [
+    {
+      "test_id": "S1",
+      "model": "gemini-3.8-flash",
+      "api": "interactions",
+      "ms": 121622,
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.8-flash (extract-v2)",
+        "attempts": 3,
+        "cached": false
+      },
+      "state": "CLEARED",
+      "blocking": [],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "CLEARED",
+      "expected_blocking": [],
+      "expected_info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "po": "PO-1001",
+      "diffs": [],
+      "failure": null
+    },
+    {
+      "test_id": "S7",
+      "model": "gemini-3.8-flash",
+      "api": "interactions",
+      "ms": 29069,
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.8-flash (extract-v2)",
+        "attempts": 1,
+        "cached": false
+      },
+      "state": "ON_HOLD",
+      "blocking": [
+        "SCAN_UNVERIFIED"
+      ],
+      "info": [
+        "PO_INFERRED",
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "SCAN_UNVERIFIED"
+      ],
+      "expected_info": [
+        "PO_INFERRED"
+      ],
+      "po": "PO-1004",
+      "diffs": [],
+      "failure": null
+    },
+    {
+      "test_id": "S14",
+      "model": "gemini-3.8-flash",
+      "api": "interactions",
+      "ms": 71069,
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.8-flash (extract-v2)",
+        "attempts": 2,
+        "cached": false
+      },
+      "state": "CLEARED",
+      "blocking": [],
+      "info": [
+        "LINE_MAPPED_AI_VERIFIED",
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "CLEARED",
+      "expected_blocking": [],
+      "expected_info": [
+        "LINE_MAPPED_AI_VERIFIED",
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "po": "PO-1009",
+      "diffs": [],
+      "failure": null
+    }
+  ]
+}

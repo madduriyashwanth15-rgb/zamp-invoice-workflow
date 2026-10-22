@@ -1,3 +1,4 @@
+import Decimal from "decimal.js";
 import { z } from "zod";
 import type { MappingProposal, MappingProposer, MappingRequest, ReferenceData } from "@/domain/engine/types";
 import { extractionSchema, type Extraction } from "@/domain/extraction-schema";
@@ -55,6 +56,17 @@ function coerce(raw: unknown): unknown {
   return o;
 }
 
+/**
+ * When no tax total is printed (only CGST/SGST or IGST lines), code adds the printed components so the record
+ * matches the extraction schema. The model is told not to do this sum itself (live run, 22 Oct: it did so on one
+ * invoice and not on two others with the same layout).
+ */
+export function withTaxTotal(e: Extraction): Extraction {
+  const parts = [e.cgst, e.sgst, e.igst ?? null].filter((v): v is string => v != null);
+  if (e.tax_total != null || parts.length === 0) return e;
+  return { ...e, tax_total: parts.reduce((s, v) => s.plus(v), new Decimal(0)).toFixed(2) };
+}
+
 function toBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64");
 }
@@ -109,8 +121,9 @@ export class GeminiExtractor implements Extractor {
       }
       const parsed = this.schema.safeParse(coerce(json));
       if (parsed.success) {
-        if (key && this.o.cache) await this.o.cache.set(key, parsed.data);
-        return { status: "ok", extraction: parsed.data, attempts: calls, label: this.label };
+        const extraction = withTaxTotal(parsed.data);
+        if (key && this.o.cache) await this.o.cache.set(key, extraction);
+        return { status: "ok", extraction, attempts: calls, label: this.label };
       }
       feedback = parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`);
     }
