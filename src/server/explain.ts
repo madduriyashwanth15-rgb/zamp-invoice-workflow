@@ -247,7 +247,7 @@ function explainFinding(f: Finding, x: Facts): string {
       const earlier = x.ctx.refOf(String(e.earlier_run));
       if (e.this_total != null) {
         const state = STATE_TEXT[e.earlier_state as RunRecord["state"]]?.label.toLowerCase() ?? String(e.earlier_state);
-        return `${earlier}${e.earlier_vendor_matched === false ? ", whose vendor was not matched to the vendor master," : ""} has the same invoice number and is already ${state}${e.earlier_exported ? " and exported" : ""}: ${inr(e.earlier_total)} dated ${formatDate(String(e.earlier_date))}. This one is ${inr(e.this_total)} dated ${formatDate(String(e.this_date))}.`;
+        return `${earlier}${e.earlier_vendor_matched === false ? ", whose vendor was not matched to the vendor master," : ""} has the same ${e.same === "date and total" ? "date and total" : "invoice number"} and is already ${state}${e.earlier_exported ? " and exported" : ""}: ${inr(e.earlier_total)} dated ${formatDate(String(e.earlier_date))}. This one is ${inr(e.this_total)} dated ${formatDate(String(e.this_date))}.`;
       }
       if (e.earlier_state === "REJECTED") return `${earlier} had the same invoice number and was rejected; this one has different content.`;
       return `Clearing this would leave two payable invoices with the same number (${earlier}).`;

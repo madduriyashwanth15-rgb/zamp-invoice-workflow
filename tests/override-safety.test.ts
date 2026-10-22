@@ -5,7 +5,7 @@ import { ingest, receiveUnreadable, type ExtractionAttempt, type Extractor, type
 import { availableActions } from "@/domain/runs/queries";
 import { approve, exportApproved, overrideApprove, processAsInvoice, requestCorrection } from "@/domain/runs/review";
 import { readTextLayer } from "@/server/pdf-text";
-import { detail } from "@/server/views";
+import { detail, summarize } from "@/server/views";
 import { extractionOf, textFrom } from "./support/direct";
 import { AnswerKeyExtractor, called, deliver, makeDeps, reference } from "./support/harness";
 
@@ -268,6 +268,50 @@ describe("P9b when one copy was not matched to the vendor master (review 23 Oct)
     const d = detail((await deps.store.read((st) => st.runs.get(s1.run_id)))!, state, await deps.store.logs(s1.run_id), deps.reference);
     expect(d.actions.map((a) => a.action)).toEqual(["manual_hold"]);
     expect(d.notice).toMatch(/^Approval is not offered: .* already approved for invoice number FP-2026-0418 with the same total/);
+  });
+
+  it.each([
+    ["number not read", { invoice_number: null }],
+    ["number misread", { invoice_number: "FP-2026-04I8" }],
+  ])("misread copy (%s) approved first: the clean S1 is held by same date and total, not cleared", async (_label, change) => {
+    const { deps, send } = setup();
+    const twin = await send("rescan.pdf", { ...rescan(), ...change }, { sha256: "scan-1" });
+    expect((await overrideApprove(deps, twin.run_id, { ...DIVYA, note: "Checked by phone", ...called(), confirmFailingChecks: true })).ok).toBe(true);
+    const s1 = await send("s1.pdf", extractionOf("S1"), { sha256: "scan-2" });
+    expect(s1.blocking_codes).toEqual(["POSSIBLE_DOUBLE_BILLING"]);
+    expect(s1.engine!.blocking[0].evidence.same).toBe("date and total");
+  });
+
+  it("clean S1 approved first, then a misread copy with no number: its override names S1 before it can be approved", async () => {
+    const { deps, send } = setup();
+    const s1 = await send("s1.pdf", extractionOf("S1"), { sha256: "a" });
+    expect((await approve(deps, [s1.run_id], DIVYA)).ok).toBe(true);
+    const twin = await send("rescan.pdf", { ...rescan(), invoice_number: null }, { sha256: "b" });
+    const r = await overrideApprove(deps, twin.run_id, { ...DIVYA, note: "ok", ...called() });
+    expect(r).toMatchObject({ ok: false, code: "NEEDS_CONFIRMATION" });
+    if (!r.ok) expect((r.details!.problems as string[])[0]).toMatch(new RegExp(`${s1.ref} is already APPROVED for the same date and total`));
+  });
+
+  it("a cleared likely repeat is flagged in the list, so a batch approval leaves it out", async () => {
+    const { deps, send } = setup();
+    const s1 = await send("s1.pdf", extractionOf("S1"), { sha256: "a" });
+    const twin = await send("rescan.pdf", rescan(), { sha256: "b" });
+    expect((await overrideApprove(deps, twin.run_id, { ...DIVYA, note: "different invoice", ...called(), confirmFailingChecks: true })).ok).toBe(true);
+    const state = await deps.store.read((st) => ({ runs: st.runs, documents: st.documents }));
+    expect(summarize(state.runs.get(s1.run_id)!, deps.reference, state).approve_blocked).toBe(true);
+    expect(summarize(state.runs.get(s1.run_id)!, deps.reference).approve_blocked).toBe(false); // no store view, no claim
+  });
+
+  it("a certain repeat is refused even when a likely one is found first", async () => {
+    const { deps, send } = setup();
+    const s1 = await send("s1.pdf", extractionOf("S1"), { sha256: "a" });
+    expect((await approve(deps, [s1.run_id], DIVYA)).ok).toBe(true);
+    const twin1 = await send("t1.pdf", rescan(), { sha256: "b" });
+    expect((await overrideApprove(deps, twin1.run_id, { ...DIVYA, note: "confirmed", ...called(), confirmFailingChecks: true })).ok).toBe(true);
+    const twin2 = await send("t2.pdf", rescan(), { sha256: "c" });
+    const r = await overrideApprove(deps, twin2.run_id, { ...DIVYA, note: "again", ...called(), confirmFailingChecks: true });
+    expect(r).toMatchObject({ ok: false, code: "INVALID_TRANSITION_BLOCKED" });
+    if (!r.ok) expect(r.reason).toMatch(new RegExp(`${twin1.ref} is already APPROVED for invoice number FP-2026-0418 from the same vendor`));
   });
 
   it("an exact repeat (same vendor) is still refused outright, not just confirmed", async () => {

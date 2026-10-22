@@ -77,7 +77,7 @@ Normalised number: split on non-alphanumerics, uppercase, strip leading zeros fr
   - earlier REJECTED: hold only.
   - Consumption (A8): when the counterpart is CLEARED, or APPROVED and not exported, stage 8 evaluates the new run's C2/C3 excluding the counterpart's consumption (the new run is assessed as its possible replacement, which makes row 17 reachable). An exported counterpart's consumption is never excluded. The counterpart's effects (row 8, or the export block) are applied in stage 9 in the same transaction.
   - Resolution (A8): rejecting the new run (row 10) lifts an APPROVED counterpart's export block in the same transaction. A counterpart moved to ON_HOLD RELATED_INVOICE_DISPUTE is resolved like any hold: approve by override (row 9, note) or reject (row 10).
-- D3b (v1.4). A CLEARED or APPROVED run whose vendor was not matched to the vendor master (no chain) with the same normalised invoice number and the same total: ON_HOLD POSSIBLE_DOUBLE_BILLING, hold only (no dispute effects), also for a token-linked correction. Approving either copy then needs a second confirmation that names the other (P9b); a routine approval (row 6) of a cleared copy is refused.
+- D3b (v1.4). A CLEARED or APPROVED run whose vendor was not matched to the vendor master (no chain) with the same total and either the same normalised invoice number or the same invoice date (a misread copy may have lost its number too): ON_HOLD POSSIBLE_DOUBLE_BILLING, hold only (no dispute effects), also for a token-linked correction. Approving either copy then needs a second confirmation that names the other (P9b); a routine approval (row 6) of a cleared copy is refused.
 - D4. Different number, same vendor, date and total: POSSIBLE_DUPLICATE (P2).
 
 ## 6. PO match

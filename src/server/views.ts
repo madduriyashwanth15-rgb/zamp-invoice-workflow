@@ -51,6 +51,8 @@ export interface RunSummary {
   filename: string | null;
   /** The routing slip in brief, for the queue: reading, the eight checks and the reviewer, each with its status. */
   slip: SlipMark[];
+  /** A cleared invoice that looks like a repeat of a payable one: not approvable by a routine (or batch) approval. */
+  approve_blocked: boolean;
 }
 
 /** One step of the routing slip in brief. Statuses come from the run's recorded stages; nothing is inferred. */
@@ -168,7 +170,7 @@ const fmtRupees = (p: bigint | null) => (p == null ? null : formatInr(paiseToRup
 const evaluated = (run: RunRecord, stage: string) =>
   run.engine?.stages.some((s) => s.stage === stage && s.status !== "not_evaluated") ?? false;
 
-export function summarize(run: RunRecord, ref: ReferenceData): RunSummary {
+export function summarize(run: RunRecord, ref: ReferenceData, state?: Pick<StoreState, "runs"> & Partial<Pick<StoreState, "documents">>): RunSummary {
   const vendor = run.vendor_id ? ref.vendors.find((v) => v.vendor_id === run.vendor_id) : undefined;
   const primary = run.primary_reason ? codeView(run.primary_reason) : null;
   return {
@@ -184,6 +186,7 @@ export function summarize(run: RunRecord, ref: ReferenceData): RunSummary {
     blocking_count: run.blocking_codes.length, exported: run.exported, export_id: run.export_id, export_blocked: run.export_blocked,
     version: run.version, created_at: run.created_at, updated_at: run.updated_at, filename: run.filename,
     slip: slipOf(run),
+    approve_blocked: Boolean(state && run.state === "CLEARED" && sameInvoicePayable(run, state)),
   };
 }
 
@@ -410,7 +413,7 @@ export function detail(run: RunRecord, state: Pick<StoreState, "runs" | "documen
   const review = reviewStage(run, logs.events, actions);
   const ctx = explainContext(run, state, ref, logs.events, actions);
   return {
-    ...summarize(run, ref),
+    ...summarize(run, ref, state),
     failure: run.failure, sender_email: run.sender_email, uploader: run.uploader_display_name, subject: run.subject, reply_token: run.reply_token,
     extracted_by: run.extracted_by, extraction: run.extraction,
     document: doc ? { run_id: doc.run_id, filename: doc.filename, content_type: doc.content_type, size_bytes: doc.size_bytes, sha256: doc.sha256, has_text_layer: doc.has_text_layer, body_text: doc.body_text, text_chars: doc.text_layer.length } : null,

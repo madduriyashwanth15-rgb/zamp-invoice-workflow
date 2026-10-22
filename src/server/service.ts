@@ -21,10 +21,11 @@ const STUCK_AFTER_MS = 6 * 60_000; // above the 300 s function limit, which the 
 export async function listRuns(): Promise<{ runs: RunSummary[]; exports: { export_id: string; created_by: string; created_at: string; count: number }[] }> {
   const { deps } = runtime();
   await failStuckRuns(deps, STUCK_AFTER_MS);
-  const runs = await deps.store.read((s) => [...s.runs.values()]);
+  const state = await deps.store.read((s) => ({ runs: s.runs, documents: s.documents }));
+  const runs = [...state.runs.values()];
   const logs = await deps.store.logs();
   return {
-    runs: runs.reverse().map((r) => summarize(r, deps.reference)),
+    runs: runs.reverse().map((r) => summarize(r, deps.reference, state)),
     exports: logs.exports.slice().reverse().map((x) => ({ export_id: x.export_id, created_by: x.created_by_display_name, created_at: x.created_at, count: x.run_ids.length })),
   };
 }

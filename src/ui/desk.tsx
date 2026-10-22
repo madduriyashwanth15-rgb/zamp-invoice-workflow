@@ -180,7 +180,8 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const selectable = filter === "cleared";
-  const selected = runs.filter((r) => picked.has(r.run_id));
+  const approvable = runs.filter((r) => !r.approve_blocked && !r.export_blocked);
+  const selected = approvable.filter((r) => picked.has(r.run_id));
   const toggle = (id: string, on: boolean) => {
     const next = new Set(picked);
     if (on) next.add(id);
@@ -231,8 +232,8 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
               type="checkbox"
               className="h-4 w-4 md:hidden"
               aria-label="Select all cleared invoices"
-              checked={selected.length === runs.length}
-              onChange={(e) => setPicked(e.target.checked ? new Set(runs.map((r) => r.run_id)) : new Set())}
+              checked={selected.length > 0 && selected.length === approvable.length}
+              onChange={(e) => setPicked(e.target.checked ? new Set(approvable.map((r) => r.run_id)) : new Set())}
             />
             {selected.length ? `${selected.length} selected` : "Select cleared invoices to approve them together"}
           </label>
@@ -261,6 +262,8 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
                 className="mt-1.5 h-4 w-4 shrink-0"
                 aria-label={`Select ${r.vendor ?? r.ref}`}
                 checked={picked.has(r.run_id)}
+                disabled={r.approve_blocked || r.export_blocked}
+                title={r.approve_blocked ? "Looks like a repeat of a payable invoice: open it to decide" : undefined}
                 onChange={(e) => toggle(r.run_id, e.target.checked)}
               />
             )}
@@ -302,8 +305,8 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
                   <input
                     type="checkbox"
                     aria-label="Select all cleared invoices"
-                    checked={selected.length === runs.length}
-                    onChange={(e) => setPicked(e.target.checked ? new Set(runs.map((r) => r.run_id)) : new Set())}
+                    checked={selected.length > 0 && selected.length === approvable.length}
+                    onChange={(e) => setPicked(e.target.checked ? new Set(approvable.map((r) => r.run_id)) : new Set())}
                   />
                 </th>
               )}
@@ -322,6 +325,8 @@ function RunTable({ runs, filter, onChanged }: { runs: RunSummary[]; filter: Fil
                       type="checkbox"
                       aria-label={`Select ${r.vendor ?? r.ref}`}
                       checked={picked.has(r.run_id)}
+                      disabled={r.approve_blocked || r.export_blocked}
+                      title={r.approve_blocked ? "Looks like a repeat of a payable invoice: open it to decide" : undefined}
                       onChange={(e) => toggle(r.run_id, e.target.checked)}
                     />
                   </td>
@@ -371,6 +376,7 @@ function VendorNote({ r }: { r: RunSummary }) {
 function Why({ r }: { r: RunSummary }) {
   if (r.state === "PROCESSING" || r.state === "RECEIVED") return <span className="text-carbon-deep">Reading the document</span>;
   if (r.state === "SUPERSEDED") return <span>Replaced by the vendor&apos;s corrected invoice</span>;
+  if (r.approve_blocked) return <span className="text-hold-fg">Looks like a repeat of a payable invoice: open it to decide</span>;
   if (r.primary) {
     return (
       <>

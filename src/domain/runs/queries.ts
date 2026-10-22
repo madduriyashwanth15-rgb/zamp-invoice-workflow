@@ -104,17 +104,23 @@ export function sameInvoicePayable(
   const sha = s.documents?.get(run.run_id)?.sha256 ?? null;
   const number = run.extraction?.invoice_number ? normInvoiceNumber(run.extraction.invoice_number) : null;
   const vendorKey = (r: RunRecord) => r.vendor_id ?? (r.extraction?.vendor_name ? `name:${normText(r.extraction.vendor_name)}` : null);
+  let likely: { other: RunRecord; why: string; strict: boolean } | undefined; // a certain match elsewhere wins
   for (const r of s.runs.values()) {
     if (r.run_id === run.run_id || exclude.has(r.run_id) || !PAYABLE_STATES.has(r.state)) continue;
     if (sha && s.documents?.get(r.run_id)?.sha256 === sha) return { other: r, why: "the same file", strict: true };
-    if (!number || !r.extraction?.invoice_number || normInvoiceNumber(r.extraction.invoice_number) !== number) continue;
-    if (vendorKey(run) && vendorKey(r) === vendorKey(run)) return { other: r, why: `invoice number ${run.extraction!.invoice_number} from the same vendor`, strict: true };
-    if ((!run.vendor_id || !r.vendor_id) && run.total_paise != null && run.total_paise === r.total_paise) {
-      // Not certain: two suppliers can both number an invoice "1". A person may approve it after a second confirmation.
-      return { other: r, why: `invoice number ${run.extraction!.invoice_number} with the same total (one of them is not matched to the vendor master)`, strict: false };
+    const sameNumber = Boolean(number && r.extraction?.invoice_number && normInvoiceNumber(r.extraction.invoice_number) === number);
+    if (sameNumber && vendorKey(run) && vendorKey(r) === vendorKey(run)) return { other: r, why: `invoice number ${run.extraction!.invoice_number} from the same vendor`, strict: true };
+    // Not certain (two suppliers can both number an invoice "1", or bill the same amount on one day), so a person
+    // may approve it after a second confirmation. A misread copy may have lost its number too: date and total count.
+    const unmatched = !run.vendor_id || !r.vendor_id;
+    const sameTotal = run.total_paise != null && run.total_paise === r.total_paise;
+    if (!likely && unmatched && sameTotal && sameNumber) {
+      likely = { other: r, why: `invoice number ${run.extraction!.invoice_number} with the same total (one of them is not matched to the vendor master)`, strict: false };
+    } else if (!likely && unmatched && sameTotal && run.invoice_date && run.invoice_date === r.invoice_date) {
+      likely = { other: r, why: `the same date and total (one of them is not matched to the vendor master)`, strict: false };
     }
   }
-  return undefined;
+  return likely;
 }
 
 /** Open POs of the run's vendor, when the code found none for it (the reviewer names one at override). */

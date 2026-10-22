@@ -351,11 +351,13 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
     // P9b (v1.4): a payable copy whose vendor was not matched (a misread re-scan) has no chain, so D1-D3 cannot see
     // it. The same number and total is held, whatever the chain found (a token-linked correction included), so this
     // copy is explained and decided by a person, never cleared.
-    const unmatched = priorRuns.find((p) => PAYABLE.has(p.state) && p.vendor_id == null && p.invoice_number_norm === result.invoice_number_norm
-      && p.total_paise != null && p.total_paise === result.total_paise);
+    // A misread copy may have lost its number as well, so the same date and total also counts.
+    const sameAs = (p: PriorRun) => (p.invoice_number_norm === result.invoice_number_norm ? "invoice number and total"
+      : ex.invoice_date && p.invoice_date === ex.invoice_date ? "date and total" : null);
+    const unmatched = priorRuns.find((p) => PAYABLE.has(p.state) && p.vendor_id == null && p.total_paise != null && p.total_paise === result.total_paise && sameAs(p));
     if (unmatched && !payable) {
-      t.add("POSSIBLE_DOUBLE_BILLING", "Same invoice number and total as a payable run whose vendor was not matched to the vendor master (D3, hold only)", {
-        earlier_run: unmatched.run_id, earlier_state: unmatched.state, earlier_exported: unmatched.exported, earlier_vendor_matched: false,
+      t.add("POSSIBLE_DOUBLE_BILLING", `Same ${sameAs(unmatched)} as a payable run whose vendor was not matched to the vendor master (D3, hold only)`, {
+        earlier_run: unmatched.run_id, earlier_state: unmatched.state, earlier_exported: unmatched.exported, earlier_vendor_matched: false, same: sameAs(unmatched),
         earlier_date: unmatched.invoice_date, earlier_total: r(unmatched.total_paise), this_date: ex.invoice_date, this_total: ex.total,
       });
     }
