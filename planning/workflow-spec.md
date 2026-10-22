@@ -51,6 +51,7 @@ Checks that need a missing earlier result are recorded "not evaluated (reason)".
 - V1. Required: invoice number, date, vendor identity, at least one line, total: else MISSING_REQUIRED_FIELD.
 - V2. Arithmetic within Rs 1 on the extracted price basis (section 16.4: lines, subtotal or taxable value, tax components, tax per line rate, total): else ARITHMETIC_MISMATCH, or TAX_BASIS_UNCLEAR when only another basis is consistent (T3).
 - V3. Text-layer documents: invoice number, total, PO reference (if extracted), every line amount and unit price, and the bank account last 4 (if extracted) must appear in the normalised text: else EVIDENCE_NOT_FOUND (A14).
+- V3b (v1.4). The total, line amounts and unit prices must each appear as a whole printed number of the same value (digit grouping and trailing zeros ignored: "13,000" vouches for 13000.00), not as digits inside a longer number; else EVIDENCE_NOT_FOUND. Invoice number, PO reference and bank last 4 keep the normalised-text check.
 - V4. No usable text layer: SCAN_UNVERIFIED, always, even if every other check passes.
 - V5. Date more than 1 day in the future: DATE_INVALID (P2).
 - K1. GSTIN exact, else normalised name or alias: else VENDOR_UNKNOWN.
@@ -253,4 +254,5 @@ Decided by the owner on 23 Oct 2026 (audit decisions Q1-Q11). Rows marked implem
 | Bank, vendor and sender overrides need a callback record and a second confirmation | Row 9 | Q9 | Implemented (section 11). Covers VENDOR_UNKNOWN, VENDOR_GSTIN_MISMATCH, SENDER_UNVERIFIED and BANK_DETAILS_CHANGED; a number other than the vendor-master number is refused (K4: verify by phone on the master number). The GSTIN hold is included as a vendor-identity hold (flagged to the owner) |
 | Undoing an approval before export | Section 11 | Q10 | Deferred |
 | Demo reset requires DEMO_ADMIN_KEY | Demo tools | Q5 | Implemented (a92657f) |
+| Amounts in V3 must be printed as whole numbers of the same value, not digits inside a longer number (a misread 1300.00 was vouched for by 13,000.00) | V3b | Audit A05 (safer default, flagged to the owner) | Implemented (section 4) |
 | A correction request is offered only when a hold is one the vendor can fix, and the email lists only those, in plain words without rule codes. Not offered for bank account, sender, vendor-master, duplicate or correction-link holds, an unread bank account (K4b), values not found in the text (V3) or our reader disagreeing with an invoice title (G2): those are checks on our side, and for a changed bank account the email would ask the possibly compromised sender to confirm their own change | Row 11, section 13 | Audit U03 (safer default, flagged to the owner) | Implemented (section 11) |

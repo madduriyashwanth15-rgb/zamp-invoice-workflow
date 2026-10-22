@@ -67,6 +67,22 @@ class Trace {
 }
 
 
+/** An amount's value as a canonical decimal string ("13000.00" and "13,000" -> "13000"); unparseable -> itself. */
+function amountKey(v: string): string {
+  const t = v.replace(/,/g, "").trim();
+  return /^-?\d+(\.\d+)?$/.test(t) ? new Decimal(t).toString() : t;
+}
+
+/** V3b: every number printed in the text (digits with Indian or Western grouping and decimals), by value. */
+function printedAmounts(textLayer: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of textLayer.matchAll(/\d[\d,]*(?:\.\d+)?/g)) {
+    const t = m[0].replace(/,+$/, "");
+    out.add(amountKey(t));
+  }
+  return out;
+}
+
 /** Pre-tax amount of a line in paise: exclusive / none as printed; inclusive divided by (1 + rate). */
 function preTaxPaise(line: ExtractionLine, basis: PriceBasis): Paise {
   if (basis !== "inclusive") return toPaise(line.amount);
@@ -191,16 +207,20 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
 
   if (doc.has_text_layer) {
     const text = normText(doc.text_layer);
-    const needles: [string, string][] = [];
-    if (ex.invoice_number) needles.push(["invoice number", ex.invoice_number]);
-    if (ex.total != null) needles.push(["total", ex.total]);
-    if (ex.po_reference) needles.push(["PO reference", ex.po_reference]);
+    const amounts = printedAmounts(doc.text_layer);
+    // V3b (spec v1.4, audit A05): an amount must be printed as a whole number on the page, equal in value
+    // ("13,000.00" for 13000), not found inside a longer one ("1,00,000" no longer vouches for 1000).
+    const needles: [string, string, "text" | "amount"][] = [];
+    if (ex.invoice_number) needles.push(["invoice number", ex.invoice_number, "text"]);
+    if (ex.total != null) needles.push(["total", ex.total, "amount"]);
+    if (ex.po_reference) needles.push(["PO reference", ex.po_reference, "text"]);
     for (const l of ex.lines) {
-      needles.push([`line ${l.line_no} amount`, l.amount]);
-      if (l.unit_price != null) needles.push([`line ${l.line_no} unit price`, l.unit_price]);
+      needles.push([`line ${l.line_no} amount`, l.amount, "amount"]);
+      if (l.unit_price != null) needles.push([`line ${l.line_no} unit price`, l.unit_price, "amount"]);
     }
-    if (ex.bank_account_last4) needles.push(["bank account last 4", ex.bank_account_last4]);
-    const notFound = needles.filter(([, v]) => !text.includes(normText(v))).map(([k, v]) => `${k} = ${v}`);
+    if (ex.bank_account_last4) needles.push(["bank account last 4", ex.bank_account_last4, "text"]);
+    const found = ([, v, kind]: (typeof needles)[number]) => (kind === "amount" ? amounts.has(amountKey(v)) : text.includes(normText(v)));
+    const notFound = needles.filter((n) => !found(n)).map(([k, v]) => `${k} = ${v}`);
     if (notFound.length) {
       t.add("EVIDENCE_NOT_FOUND", "Extracted values not found in the document's text layer (V3)", { searched: needles.length, not_found: notFound });
     } else t.note(`V3: all ${needles.length} extracted values found in the text layer`);

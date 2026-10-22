@@ -130,3 +130,31 @@ describe("M3 (spec v1.4): an AI line match needs support the code can check, not
     expect(infos(r)).toContain("LINE_MAPPED_AI_VERIFIED");
   });
 });
+
+describe("V3b (spec v1.4): an amount must be printed as a whole number, not found inside a longer one (audit A05)", () => {
+  it("S1 with a line amount misread as 1300.00 (printed 13,000.00) is not vouched for by the text", async () => {
+    const e = extractionOf("S1");
+    const misread: Extraction = { ...e, lines: e.lines.map((l) => (l.line_no === 1 ? { ...l, amount: "1300.00" } : l)) };
+    const r = await evalDirect(misread, doc(await textOf("S1")));
+    expect(r.outcome).toBe("ON_HOLD");
+    expect(finding(r, "EVIDENCE_NOT_FOUND")!.evidence.not_found).toContain("line 1 amount = 1300.00");
+  });
+
+  it("the same misread passed the old check: the digits 130000 are inside 1300000", async () => {
+    expect("1300000".includes("130000")).toBe(true); // what the substring check compared
+  });
+
+  it("grouping and trailing zeros do not matter: 13,000 and 1,00,000.0 vouch for 13000.00 and 100000.00", async () => {
+    const e = extractionOf("S1");
+    const text = (await textOf("S1")).replace(/13,000\.00/g, "13,000").replace(/18,880\.00/g, "18,880.0");
+    const r = await evalDirect(e, doc(text));
+    expect(codes(r)).not.toContain("EVIDENCE_NOT_FOUND");
+  });
+
+  it("every one of the 18 test documents still finds all its values (their real text layers)", async () => {
+    for (const id of ["S1", "S2", "S3", "S4", "S6a", "S6b", "S10", "S11", "S12", "S13", "S14"]) {
+      const r = await evalDirect(extractionOf(id), doc(await textOf(id)));
+      expect(codes(r), id).not.toContain("EVIDENCE_NOT_FOUND");
+    }
+  });
+});
