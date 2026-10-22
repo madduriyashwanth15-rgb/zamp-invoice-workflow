@@ -400,7 +400,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
       const target = proposal?.proposed_po_line != null ? po.lines.find((pl) => pl.line_no === proposal.proposed_po_line && pl.line_kind !== "charge") : undefined;
       if (!proposal || !target) {
         t.add("LINE_UNMAPPED", `Line ${line.line_no} "${line.description}" matches no PO line (M1), and the AI proposed none (M2)`, {
-          description: line.description, po: po.po_number, proposer: input.proposer.label, proposal: proposal?.justification ?? null,
+          description: line.description, po: po.po_number, proposer: proposal?.by ?? input.proposer.label, proposal: proposal?.justification ?? null,
         }, line.line_no);
         continue;
       }
@@ -419,7 +419,7 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
       factor = u.factor;
       via = `M2 proposal verified by code (${u.reason})`;
       t.add("LINE_MAPPED_AI_VERIFIED", `Line ${line.line_no} mapped to PO line ${target.line_no} by an AI proposal that code verified (M2-M3)`, {
-        proposal: proposal.justification, proposer: input.proposer.label, verification: u.reason,
+        proposal: proposal.justification, proposer: proposal.by ?? input.proposer.label, verification: u.reason,
       }, line.line_no);
     } else {
       t.add("LINE_UNMAPPED", `Line ${line.line_no} "${line.description}" matches no PO line (M1); no AI mapping available`, {

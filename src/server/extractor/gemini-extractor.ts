@@ -9,6 +9,10 @@ import { EXTRACTION_PROMPT_VERSION, MAPPING_PROMPT_VERSION, extractionPrompt, ma
 // One read-and-classify call per document (spec 14): transport errors retried 3 times, schema-invalid answers
 // retried twice with the validation errors fed back, results cached by sha256 + prompt version + model.
 //
+// Backup model (optional, GEMINI_FALLBACK_MODEL): after a retryable failure of the main model (overload, quota,
+// timeout), the remaining attempts go to the backup model. The run records which model actually read it. The
+// number of attempts and the time budget are unchanged.
+//
 // Time budget: processing runs inside one serverless invocation, and Vercel Hobby stops a function at 300 s.
 // No new call is started once the budget is spent, so a run always ends as decided or FAILED (retryable) inside
 // that limit instead of being cut off mid-way. Worst case: budget + one call's timeout.
@@ -30,6 +34,8 @@ export class MemoryExtractionCache implements ExtractionCache {
 
 export interface GeminiExtractorOptions {
   model: string;
+  /** Used for the remaining attempts after a retryable failure of `model`. */
+  fallbackModel?: string | null;
   transport: GeminiTransport;
   reference: ReferenceData;
   cache?: ExtractionCache;
@@ -86,24 +92,31 @@ function toBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64");
 }
 
+const labelOf = (model: string, version: string) => `Gemini ${model} (${version})`;
+
 export class GeminiExtractor implements Extractor {
   readonly label: string;
   private schema;
   constructor(private o: GeminiExtractorOptions) {
-    this.label = `Gemini ${o.model} (${EXTRACTION_PROMPT_VERSION})`;
+    this.label = labelOf(o.model, EXTRACTION_PROMPT_VERSION);
     this.schema = extractionSchema(o.reference.settings);
   }
 
-  cacheKey(sha256: string | null): string | null {
-    return sha256 ? `${sha256}|${EXTRACTION_PROMPT_VERSION}|${this.o.model}` : null;
+  cacheKey(sha256: string | null, model = this.o.model): string | null {
+    return sha256 ? `${sha256}|${EXTRACTION_PROMPT_VERSION}|${model}` : null;
   }
 
   async extract(input: ExtractorInput): Promise<ExtractionAttempt> {
-    const key = this.cacheKey(input.sha256);
-    if (key && this.o.cache) {
-      const hit = await this.o.cache.get(key);
-      if (hit) return { status: "ok", extraction: hit, attempts: 0, label: this.label, cached: true };
+    const models = [this.o.model, ...(this.o.fallbackModel && this.o.fallbackModel !== this.o.model ? [this.o.fallbackModel] : [])];
+    if (this.o.cache) {
+      for (const m of models) {
+        const k = this.cacheKey(input.sha256, m);
+        const hit = k ? await this.o.cache.get(k) : null;
+        if (hit) return { status: "ok", extraction: hit, attempts: 0, label: labelOf(m, EXTRACTION_PROMPT_VERSION), cached: true };
+      }
     }
+    let model = models[0];
+    const label = () => labelOf(model, EXTRACTION_PROMPT_VERSION);
     const sleep = this.o.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
     const maxTransport = this.o.transportAttempts ?? 3;
     const maxSchema = this.o.schemaAttempts ?? 2;
@@ -121,7 +134,7 @@ export class GeminiExtractor implements Extractor {
     const outOfTime = () => {
       const spent = Math.round((clock() - begin) / 1000);
       retries.push(`stopped: the ${Math.round(budget / 1000)} s time budget was used up (${spent} s, ${plural(calls, "call")})`);
-      return { status: "transport_error" as const, error: `time budget used up after ${plural(calls, "call")} (${spent} s)`, attempts: calls, label: this.label, retries };
+      return { status: "transport_error" as const, error: `time budget used up after ${plural(calls, "call")} (${spent} s)`, attempts: calls, label: label(), retries };
     };
     for (let s = 1; s <= maxSchema; s++) {
       let text: string | null = null;
@@ -129,16 +142,17 @@ export class GeminiExtractor implements Extractor {
         if (calls > 0 && clock() - begin > budget) return outOfTime();
         calls++;
         const started = clock();
-        const res = await this.o.transport.generate({ model: this.o.model, json: true, parts: feedback ? [...base, { text: retryFeedback(feedback) }] : base });
+        const res = await this.o.transport.generate({ model, json: true, parts: feedback ? [...base, { text: retryFeedback(feedback) }] : base });
         const secs = Math.round((clock() - started) / 100) / 10;
         if (res.ok) {
           text = res.text;
           break;
         }
-        retries.push(`call ${calls}: ${res.status ?? "network"} ${res.message.slice(0, 120)} (${secs} s)`);
+        retries.push(`call ${calls} (${model}): ${res.status ?? "network"} ${res.message.slice(0, 120)} (${secs} s)`);
         if (!res.retryable || t === maxTransport) {
-          return { status: "transport_error", error: `${res.status ?? "network"}: ${res.message}`, attempts: calls, label: this.label, retries };
+          return { status: "transport_error", error: `${res.status ?? "network"}: ${res.message}`, attempts: calls, label: label(), retries };
         }
+        if (models.length > 1 && model === models[0]) model = models[1];
         await sleep(500 * 2 ** (t - 1));
       }
       let json: unknown;
@@ -152,13 +166,14 @@ export class GeminiExtractor implements Extractor {
       const parsed = this.schema.safeParse(coerce(json));
       if (parsed.success) {
         const extraction = withTaxTotal(parsed.data);
+        const key = this.cacheKey(input.sha256, model);
         if (key && this.o.cache) await this.o.cache.set(key, extraction);
-        return { status: "ok", extraction, attempts: calls, label: this.label, retries };
+        return { status: "ok", extraction, attempts: calls, label: label(), retries };
       }
       feedback = parsed.error.issues.map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`);
       retries.push(`call ${calls}: answer rejected by validation (${feedback.slice(0, 3).join("; ")})`);
     }
-    return { status: "schema_invalid", errors: feedback ?? ["unknown"], attempts: calls, label: this.label, retries };
+    return { status: "schema_invalid", errors: feedback ?? ["unknown"], attempts: calls, label: label(), retries };
   }
 }
 
@@ -177,8 +192,8 @@ export class ProposerUnavailableError extends Error {}
  */
 export class GeminiMappingProposer implements MappingProposer {
   readonly label: string;
-  constructor(private o: { model: string; transport: GeminiTransport; reference: ReferenceData; sleep?: (ms: number) => Promise<void>; now?: () => number; budgetMs?: number }) {
-    this.label = `Gemini ${o.model} (${MAPPING_PROMPT_VERSION})`;
+  constructor(private o: { model: string; fallbackModel?: string | null; transport: GeminiTransport; reference: ReferenceData; sleep?: (ms: number) => Promise<void>; now?: () => number; budgetMs?: number }) {
+    this.label = labelOf(o.model, MAPPING_PROMPT_VERSION);
   }
   async propose(req: MappingRequest): Promise<MappingProposal | null> {
     const prompt = mappingPrompt({
@@ -190,20 +205,22 @@ export class GeminiMappingProposer implements MappingProposer {
     const clock = this.o.now ?? (() => Date.now());
     const begin = clock();
     const budget = this.o.budgetMs ?? MAPPING_BUDGET_MS;
+    let model = this.o.model;
     for (let t = 1; t <= 3; t++) {
       if (t > 1 && clock() - begin > budget) {
         throw new ProposerUnavailableError(`line mapping call: the ${Math.round(budget / 1000)} s time budget was used up after ${plural(t - 1, "call")}`);
       }
-      const res = await this.o.transport.generate({ model: this.o.model, json: true, parts: [{ text: prompt }] });
+      const res = await this.o.transport.generate({ model, json: true, parts: [{ text: prompt }] });
       if (res.ok) {
         try {
           const p = proposalSchema.safeParse(JSON.parse(res.text.replace(/^```(?:json)?\s*|\s*```$/g, "")));
-          return p.success ? p.data : null;
+          return p.success ? { ...p.data, by: labelOf(model, MAPPING_PROMPT_VERSION) } : null;
         } catch {
           return null;
         }
       }
       if (!res.retryable || t === 3) throw new ProposerUnavailableError(`line mapping call failed: ${res.status ?? "network"} ${res.message}`);
+      if (this.o.fallbackModel && model === this.o.model) model = this.o.fallbackModel;
       await sleep(500 * 2 ** (t - 1));
     }
     return null;

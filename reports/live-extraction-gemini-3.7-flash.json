@@ -1,0 +1,93 @@
+{
+  "at": "2026-10-22T06:44:58.002Z",
+  "model": "gemini-3.7-flash",
+  "results": [
+    {
+      "test_id": "S1",
+      "model": "gemini-3.7-flash",
+      "api": "interactions",
+      "ms": 20063,
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.7-flash (extract-v2)",
+        "attempts": 2,
+        "cached": false,
+        "retries": [
+          "call 1 (gemini-3.7-flash): 503 {\"error\":{\"message\":\"gemini-3.7-flash is currently experiencing high demand, spikes in demand are usually temporary. Ple (11.3 s)"
+        ]
+      },
+      "state": "CLEARED",
+      "blocking": [],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "CLEARED",
+      "expected_blocking": [],
+      "expected_info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "po": "PO-1001",
+      "diffs": [],
+      "failure": null
+    },
+    {
+      "test_id": "S7",
+      "model": "gemini-3.7-flash",
+      "api": "interactions",
+      "ms": 23420,
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.7-flash (extract-v2)",
+        "attempts": 2,
+        "cached": false,
+        "retries": [
+          "call 1 (gemini-3.7-flash): 503 {\"error\":{\"message\":\"gemini-3.7-flash is currently experiencing high demand, spikes in demand are usually temporary. Ple (2.9 s)"
+        ]
+      },
+      "state": "ON_HOLD",
+      "blocking": [
+        "SCAN_UNVERIFIED"
+      ],
+      "info": [
+        "PO_INFERRED",
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "SCAN_UNVERIFIED"
+      ],
+      "expected_info": [
+        "PO_INFERRED"
+      ],
+      "po": "PO-1004",
+      "diffs": [],
+      "failure": null
+    },
+    {
+      "test_id": "S14",
+      "model": "gemini-3.7-flash",
+      "api": "interactions",
+      "ms": 2766,
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.7-flash (extract-v2)",
+        "attempts": 3,
+        "cached": false,
+        "retries": [
+          "call 1 (gemini-3.7-flash): 429 {\"error\":{\"message\":\"Rate limit exceeded for model gemini-3.8-flash (limit: 20 requests per day on Free Tier). Please re (0.4 s)",
+          "call 2 (gemini-3.7-flash): 429 {\"error\":{\"message\":\"Rate limit exceeded for model gemini-3.8-flash (limit: 20 requests per day on Free Tier). Please re (0.4 s)",
+          "call 3 (gemini-3.7-flash): 429 {\"error\":{\"message\":\"Rate limit exceeded for model gemini-3.8-flash (limit: 20 requests per day on Free Tier). Please re (0.4 s)"
+        ]
+      },
+      "state": "FAILED",
+      "blocking": [],
+      "info": [],
+      "expected_outcome": "CLEARED",
+      "expected_blocking": [],
+      "expected_info": [
+        "LINE_MAPPED_AI_VERIFIED",
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "po": null,
+      "diffs": null,
+      "failure": "PROCESSING_ERROR: 429: {\"error\":{\"message\":\"Rate limit exceeded for model gemini-3.8-flash (limit: 20 requests per day on Free Tier). Please retry in 15m2s or upgrade your tier at https://ai.dev/rate-limit.\",\"code\":\"too_many_requests\"}} (3 attempts)"
+    }
+  ]
+}

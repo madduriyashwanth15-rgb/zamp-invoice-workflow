@@ -101,6 +101,8 @@ export interface MappingProposal {
   proposed_po_line: number | null;
   pack_size_read: number | null;
   justification: string;
+  /** Which model answered, when the proposer can use more than one (shown as evidence). */
+  by?: string;
 }
 
 export interface MappingProposer {

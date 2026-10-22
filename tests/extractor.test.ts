@@ -109,7 +109,7 @@ describe("GeminiExtractor through the pipeline (MOCK provider)", () => {
     const run = await deliver(deps, "S1", {});
     expect(run.state).toBe("CLEARED");
     expect(transport.requests).toHaveLength(2);
-    expect(run.extracted_by?.retries).toEqual([expect.stringMatching(/^call 1: 429 HTTP 429 \(\d+(\.\d)? s\)$/)]);
+    expect(run.extracted_by?.retries).toEqual([expect.stringMatching(/^call 1 \(gemini-test-model\): 429 HTTP 429 \(\d+(\.\d)? s\)$/)]);
   });
 
   it("a rejected answer is recorded as a retry reason too", async () => {
@@ -248,6 +248,56 @@ describe("time budget (Vercel Hobby stops a function at 300 s)", () => {
     expect(timeoutOf({ GEMINI_TIMEOUT_MS: "45000" })).toBe(45_000);
     expect(timeoutOf({ GEMINI_TIMEOUT_MS: "600000" })).toBe(60_000);
     expect(timeoutOf({})).toBe(60_000);
+  });
+});
+
+describe("backup model (GEMINI_FALLBACK_MODEL)", () => {
+  it("main model overloaded: the next attempt goes to the backup model, and the run says which model read it", async () => {
+    const transport = new ScriptedTransport([http(503), ok(s1())]);
+    const extractor = new GeminiExtractor({ model: "main-model", fallbackModel: "backup-model", transport, reference, sleep: noSleep });
+    const run = await deliver({ ...makeDeps(), extractor }, "S1", {});
+    expect(transport.requests.map((r) => r.model)).toEqual(["main-model", "backup-model"]);
+    expect(run.state).toBe("CLEARED");
+    expect(run.extracted_by?.extractor).toBe(`Gemini backup-model (${EXTRACTION_PROMPT_VERSION})`);
+    expect(run.extracted_by?.retries?.[0]).toMatch(/^call 1 \(main-model\): 503/);
+  });
+
+  it("a cached reading from the backup model is reused without any call", async () => {
+    const cache = new MemoryExtractionCache();
+    const input = { filename: "a.pdf", content_type: "application/pdf", bytes: new Uint8Array([1, 2]), text_layer: "", sha256: "sha-b" };
+    const first = new GeminiExtractor({ model: "main-model", fallbackModel: "backup-model", transport: new ScriptedTransport([http(503), ok(s1())]), reference, cache, sleep: noSleep });
+    expect((await first.extract(input)).status).toBe("ok");
+    const t2 = new ScriptedTransport([]);
+    const second = new GeminiExtractor({ model: "main-model", fallbackModel: "backup-model", transport: t2, reference, cache, sleep: noSleep });
+    expect(await second.extract(input)).toMatchObject({ status: "ok", attempts: 0, cached: true, label: `Gemini backup-model (${EXTRACTION_PROMPT_VERSION})` });
+    expect(t2.requests).toHaveLength(0);
+  });
+
+  it("without a backup model every attempt uses the main model (F5 unchanged)", async () => {
+    const transport = new ScriptedTransport([http(503), http(503), http(503)]);
+    const extractor = new GeminiExtractor({ model: "main-model", transport, reference, sleep: noSleep });
+    const run = await deliver({ ...makeDeps(), extractor }, "S1", {});
+    expect(transport.requests.map((r) => r.model)).toEqual(["main-model", "main-model", "main-model"]);
+    expect(run.state).toBe("FAILED");
+  });
+
+  it("a non-retryable error (400) does not switch models: it is not an overload", async () => {
+    const transport = new ScriptedTransport([http(400, false)]);
+    const extractor = new GeminiExtractor({ model: "main-model", fallbackModel: "backup-model", transport, reference, sleep: noSleep });
+    const run = await deliver({ ...makeDeps(), extractor }, "S1", {});
+    expect(transport.requests.map((r) => r.model)).toEqual(["main-model"]);
+    expect(run.state).toBe("FAILED");
+  });
+
+  it("S14 line mapping: main model overloaded, the backup proposes, code verifies, and the evidence names the backup", async () => {
+    const gt = (tests.get("S14")!.ai_mapping_ground_truth as { proposed_po_line: number; pack_size_read: number; justification: string }[])[0];
+    const transport = new ScriptedTransport([http(429), ok(gt)]);
+    const proposer = new GeminiMappingProposer({ model: "main-model", fallbackModel: "backup-model", reference, transport, sleep: noSleep });
+    const run = await deliver({ ...makeDeps(), proposer }, "S14", {});
+    expect(transport.requests.map((r) => r.model)).toEqual(["main-model", "backup-model"]);
+    expect(run.state).toBe("CLEARED");
+    const mapped = run.engine?.info.find((f) => f.code === "LINE_MAPPED_AI_VERIFIED");
+    expect(mapped?.evidence?.proposer).toMatch(/^Gemini backup-model/);
   });
 });
 

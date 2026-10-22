@@ -1,0 +1,88 @@
+{
+  "at": "2026-10-22T06:48:32.378Z",
+  "model": "gemini-3.5-flash-lite",
+  "results": [
+    {
+      "test_id": "S1",
+      "model": "gemini-3.5-flash-lite",
+      "api": "interactions",
+      "ms": 2883,
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v2)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "state": "CLEARED",
+      "blocking": [],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "CLEARED",
+      "expected_blocking": [],
+      "expected_info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "po": "PO-1001",
+      "diffs": [],
+      "failure": null
+    },
+    {
+      "test_id": "S7",
+      "model": "gemini-3.5-flash-lite",
+      "api": "interactions",
+      "ms": 2163,
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v2)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "state": "ON_HOLD",
+      "blocking": [
+        "SCAN_UNVERIFIED"
+      ],
+      "info": [
+        "PO_INFERRED",
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "SCAN_UNVERIFIED"
+      ],
+      "expected_info": [
+        "PO_INFERRED"
+      ],
+      "po": "PO-1004",
+      "diffs": [],
+      "failure": null
+    },
+    {
+      "test_id": "S14",
+      "model": "gemini-3.5-flash-lite",
+      "api": "interactions",
+      "ms": 3248,
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v2)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "state": "CLEARED",
+      "blocking": [],
+      "info": [
+        "LINE_MAPPED_AI_VERIFIED",
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "CLEARED",
+      "expected_blocking": [],
+      "expected_info": [
+        "LINE_MAPPED_AI_VERIFIED",
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "po": "PO-1009",
+      "diffs": [],
+      "failure": null
+    }
+  ]
+}

@@ -17,7 +17,9 @@ export function SystemStrip() {
     <p className="text-xs text-ink-3">
       <span>Reading: </span>
       <span className={info.extractor === "mock" ? "font-semibold text-hold-fg" : "text-ink-2"}>
-        {info.extractor === "gemini" ? `Gemini ${info.model}` : "MOCK extractor (answer key, test files only)"}
+        {info.extractor === "gemini"
+          ? `Gemini ${info.model}${info.fallbackModel ? `, backup ${info.fallbackModel}` : ""}`
+          : "MOCK extractor (answer key, test files only)"}
       </span>
       <span className="mx-2 text-rule-strong">|</span>
       <span>Records: </span>

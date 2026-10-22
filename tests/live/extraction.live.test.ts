@@ -9,7 +9,7 @@ import { deliver, makeDeps, reference, tests } from "../support/harness";
 
 // LIVE extraction run (plan phase E acceptance): S1, S7 and S14 read by the real Gemini API, then decided by the
 // real pipeline. Field differences from the answer key are recorded (and fail softly) so a wrong read is never
-// hidden behind a right outcome. Results go to reports/live-extraction.json. Needs GEMINI_API_KEY and GEMINI_MODEL.
+// hidden behind a right outcome. Results go to reports/live-extraction-<model>.json. Needs GEMINI_API_KEY and GEMINI_MODEL.
 
 const key = process.env.GEMINI_API_KEY;
 const model = process.env.GEMINI_MODEL;
@@ -52,7 +52,9 @@ describe.skipIf(!key || !model)("LIVE Gemini extraction (S1, S7, S14)", () => {
 
   it("records the results", () => {
     mkdirSync("reports", { recursive: true });
-    writeFileSync("reports/live-extraction.json", JSON.stringify({ at: new Date().toISOString(), model, results }, null, 2));
+    // One file per model, so checking a backup model never overwrites the main model's evidence.
+    const file = `reports/live-extraction-${model!.replace(/[^a-z0-9.-]/gi, "_")}.json`;
+    writeFileSync(file, JSON.stringify({ at: new Date().toISOString(), model, results }, null, 2));
     expect(results.length).toBe(3);
   });
 });

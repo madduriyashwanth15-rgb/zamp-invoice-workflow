@@ -15,12 +15,15 @@ import { transportFromEnv } from "@/server/extractor/gemini-transport";
 // Wires the domain to real infrastructure from environment variables. Nothing here decides anything.
 //   DATABASE_URL     Postgres (Neon demo database). Without it: an in-memory store that resets on restart.
 //   GEMINI_API_KEY   with GEMINI_MODEL: the real extractor. Without them: the MOCK answer-key extractor.
+//   GEMINI_FALLBACK_MODEL  optional backup model for attempts after the main model is overloaded or times out.
 
 export interface RuntimeInfo {
   store: "postgres" | "memory";
   extractor: "gemini" | "mock";
   extractorLabel: string;
   model: string | null;
+  /** Backup model, if configured (GEMINI_FALLBACK_MODEL). */
+  fallbackModel: string | null;
   buyer: string;
 }
 
@@ -53,6 +56,7 @@ function build(): Runtime {
   const dbUrl = process.env.DATABASE_URL;
   const key = process.env.GEMINI_API_KEY;
   const model = process.env.GEMINI_MODEL || null;
+  const fallbackModel = process.env.GEMINI_FALLBACK_MODEL || null;
 
   let store: RunStore;
   let pool: Pool | null = null;
@@ -73,8 +77,8 @@ function build(): Runtime {
   if (key && model) {
     const transport = transportFromEnv(key);
     const cache = pool && pgStore ? new PgExtractionCache(pool, pgStore) : new MemoryExtractionCache();
-    extractor = new GeminiExtractor({ model, transport, reference, cache });
-    proposer = new GeminiMappingProposer({ model, transport, reference });
+    extractor = new GeminiExtractor({ model, fallbackModel, transport, reference, cache });
+    proposer = new GeminiMappingProposer({ model, fallbackModel, transport, reference });
   } else {
     extractor = new AnswerKeyExtractor(reference);
     proposer = new AnswerKeyProposer();
@@ -94,6 +98,7 @@ function build(): Runtime {
       extractor: key && model ? "gemini" : "mock",
       extractorLabel: extractor.label,
       model,
+      fallbackModel: key && model ? fallbackModel : null,
       buyer: reference.settings.buyer.name,
     },
   };
