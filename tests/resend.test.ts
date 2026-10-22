@@ -55,6 +55,37 @@ describe("ResendClient (fetch stubbed)", () => {
   });
 });
 
+describe("ResendClient: images inside the email body are not invoices", () => {
+  const pdf = readFileSync(path.join(TEST_DATA_DIR, "invoices", "S01_FreshPack_FP-2026-0418.pdf"));
+  const client = (attachments: Record<string, unknown>[]) =>
+    new ResendClient("re_test", "https://api.resend.com", (async (url: string) => {
+      if (url.endsWith("/emails/receiving/e2")) return Response.json({ id: "e2", from: "billing@freshpack.example", to: ["ap@in.example"], subject: "Invoice FP-2026-0418", text: "Regards", html: null });
+      if (url.endsWith("/emails/receiving/e2/attachments")) return Response.json({ object: "list", has_more: false, data: attachments });
+      if (url === "https://files.example/pdf") return new Response(pdf);
+      return new Response("not found", { status: 404 });
+    }) as unknown as typeof fetch);
+  const logo = { id: "img-1", filename: "image001.png", content_type: "image/png", content_disposition: "inline", content_id: "ii_1", size: 5120, download_url: "https://files.example/logo", expires_at: "2026-10-22T10:00:00Z" };
+  const attachedPdf = { id: "att-1", filename: "S01_FreshPack_FP-2026-0418.pdf", content_type: "application/pdf", content_disposition: "attachment", size: pdf.length, download_url: "https://files.example/pdf", expires_at: "2026-10-22T10:00:00Z" };
+
+  it("a signature logo next to the PDF is ignored: one run, for the invoice", async () => {
+    const { email, fetchBytes } = await client([logo, attachedPdf]).load("e2");
+    expect(email.attachments.map((a) => a.filename)).toEqual(["S01_FreshPack_FP-2026-0418.pdf"]);
+    const deps = makeDeps();
+    const r = await ingestEmail(deps, email, fetchBytes);
+    await Promise.all(r.work.map((w) => w()));
+    expect(r.run_ids).toHaveLength(1);
+    expect((await deps.store.read((s) => s.runs.get(r.run_ids[0])!)).state).toBe("CLEARED");
+  });
+
+  it("an email with only an inline picture is still recorded, as SKIPPED NO_ATTACHMENT", async () => {
+    const { email, fetchBytes } = await client([logo]).load("e2");
+    const deps = makeDeps();
+    const r = await ingestEmail(deps, email, fetchBytes);
+    const run = await deps.store.read((s) => s.runs.get(r.run_ids[0])!);
+    expect([run.state, run.primary_reason]).toEqual(["SKIPPED", "NO_ATTACHMENT"]);
+  });
+});
+
 describe("handleReceived", () => {
   const event: ResendReceivedEvent = { type: "email.received", data: { email_id: "e9", from: "Billing@FreshPack.example", to: ["ap@in.example"], subject: "Invoice" } };
   it("Resend unreachable 3 times -> one FAILED ATTACHMENT_FETCH_FAILED run from the webhook metadata", async () => {

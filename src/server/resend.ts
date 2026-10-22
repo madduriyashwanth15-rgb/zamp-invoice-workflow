@@ -44,7 +44,7 @@ interface ReceivedEmail {
 }
 
 interface AttachmentList {
-  data: { id: string; filename: string; content_type: string; size: number; download_url: string; expires_at: string }[];
+  data: { id: string; filename: string; content_type: string; content_disposition?: string | null; size: number; download_url: string; expires_at: string }[];
 }
 
 export class ResendClient {
@@ -62,7 +62,11 @@ export class ResendClient {
   async load(emailId: string): Promise<{ email: InboundEmail; fetchBytes: (i: number) => Promise<Uint8Array> }> {
     const e = await this.get<ReceivedEmail>(`/emails/receiving/${encodeURIComponent(emailId)}`);
     const list = await this.get<AttachmentList>(`/emails/receiving/${encodeURIComponent(emailId)}/attachments`);
-    const atts = list.data.filter((a) => a.content_type && a.filename);
+    // Images inside the email body (signature logos, pasted pictures) are not invoice attachments: invoices arrive as
+    // attached files. An email left with nothing attached is still recorded, as SKIPPED NO_ATTACHMENT.
+    const atts = list.data.filter(
+      (a) => a.content_type && a.filename && !(a.content_disposition === "inline" && a.content_type.toLowerCase().startsWith("image/")),
+    );
     const email: InboundEmail = {
       provider_email_id: `resend:${e.id}`,
       attachment_id: atts[0]?.id ?? "none",
