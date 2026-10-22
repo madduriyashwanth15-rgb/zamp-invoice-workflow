@@ -1,5 +1,5 @@
-# PS-1 Workflow Specification v1.3
-Status: design frozen, 22 Oct 2026. v1.3 resolves the read-only pre-build audit (22 Oct): decisions A1-A14 (section 17) are applied in place, and section 16 makes normalisation and rule order binding. v1.2.2 clarified M5 (lump-sum markers). v1.2.1 added decision U1 (demo identity). Nothing implemented or tested.
+# PS-1 Workflow Specification v1.4
+Status: v1.4, 23 Oct 2026: rule changes from the product audit, decided by the owner and listed in section 18 (implemented ones are applied in place). v1.3 design frozen, 22 Oct 2026. v1.3 resolves the read-only pre-build audit (22 Oct): decisions A1-A14 (section 17) are applied in place, and section 16 makes normalisation and rule order binding. v1.2.2 clarified M5 (lump-sum markers). v1.2.1 added decision U1 (demo identity). Nothing implemented or tested.
 Changes from v1.1: correction linking requires a reply carrying our reference token; human approval (individual or batch, audited) required before export; disputes block export; approved invoices never silently replaced; charges detected by keyword rules plus deterministic PO comparison; chain invariant; distinct Cleared / Approved / Exported / Paid semantics. v1.2.1: reviewer identity is a self-selected display name, labelled "Demo identity — not authentication".
 Related (repository folder planning/): test-matrix.md v1.3, implementation-plan.md v2.4, SOLUTION_REVIEW.md. Test data: zamp-ps1-test-data-v2.1/.
 
@@ -45,6 +45,7 @@ Checks that need a missing earlier result are recorded "not evaluated (reason)".
 ## 4. Checks (no confidence thresholds)
 - G1. doc_type quotation / statement / other with no invoice title or number label: SKIPPED NOT_INVOICE.
 - G2. doc_type not invoice but title contains "invoice" / "tax invoice" / "bill of supply" or number label says "invoice": CLASSIFICATION_CONFLICT.
+- G1b (v1.4). doc_type invoice, but the read title or number label contains quotation, quote, estimate, proforma (pro forma, pro-forma), challan or statement; or the document's text layer contains proforma; or it contains quotation, estimate or delivery challan and neither "tax invoice" nor "bill of supply": CLASSIFICATION_CONFLICT (evidence: the word and where it was found). Whole words only. The finding is recorded and the run continues, as for G2.
 - G3. Credit note: CREDIT_NOTE_UNSUPPORTED.
 - V1. Required: invoice number, date, vendor identity, at least one line, total: else MISSING_REQUIRED_FIELD.
 - V2. Arithmetic within Rs 1 on the extracted price basis (section 16.4: lines, subtotal or taxable value, tax components, tax per line rate, total): else ARITHMETIC_MISMATCH, or TAX_BASIS_UNCLEAR when only another basis is consistent (T3).
@@ -55,6 +56,7 @@ Checks that need a missing earlier result are recorded "not evaluated (reason)".
 - K2. Name matches, GSTIN differs: VENDOR_GSTIN_MISMATCH.
 - K3. Email: sender registered for the vendor or on the AP-forwarder allowlist: else SENDER_UNVERIFIED. Upload: an internal action by a reviewer; recorded "not evaluated: internal upload by <display name> (demo identity)" (A1). K1, K2 and K4 still apply to uploads.
 - K4. Printed bank account last 4 digits vs trusted master: different: BANK_DETAILS_CHANGED (evidence: both values; "verify by phone using the vendor master number"). Not printed: info BANK_NOT_SHOWN.
+- K4b (v1.4). No bank account was read, but the text layer shows bank wording ("A/c", "Account No", "Account Number" or "IFSC"): MISSING_REQUIRED_FIELD (evidence: field "bank account", the wording, the master's last 4). An account the reader left out is a misread, not an absence; this closes the gap between P2 ("never clear when bank details are unverified") and K4.
 
 ## 5. Duplicates and corrections
 Normalised number: split on non-alphanumerics, uppercase, strip leading zeros from numeric tokens, join. Chain = same vendor + normalised number.
@@ -233,3 +235,18 @@ Gemini Flash (free tier) behind an extractor interface; versioned prompts; schem
 | A12 | Intake details | PDF, PNG, JPEG up to 4 MB; one run per attachment; token validity rule | Section 3, 11 |
 | A13 | Test execution, paths, databases | Golden run (recorded payloads + mock extractor) and live-extraction run; adapter always built; test and demo databases separate; demo seed profile; T4/T11 fixtures built in-test | Test matrix v1.3, plan v2.4 |
 | A14 | Hardening (audit risks 3 and 8) | V3 covers every line amount, unit price and bank last-4; buyer GSTIN as vendor is schema-invalid | V3, section 14 |
+
+## 18. v1.4 changes (23 Oct 2026 product audit)
+Decided by the owner on 23 Oct 2026 (audit decisions Q1-Q11). Rows marked implemented are applied in the sections named.
+| Change | Rule | Decision | Status |
+|---|---|---|---|
+| A printed bank account the reader leaves out is held: MISSING_REQUIRED_FIELD | K4b | Q2 | Implemented (section 4) |
+| Read as an invoice but worded as a quotation, proforma or challan: CLASSIFICATION_CONFLICT | G1b | Audit A03 | Implemented (section 4) |
+| AI line matches need code-checked support, not only a matching unit | M3 | Q3 | Pending |
+| An override counts PO use; the reviewer names the PO when none was found | C4, row 9 | Q1 | Pending |
+| Duplicate guard at override (same file or same number and vendor); no override of CREDIT_NOTE_UNSUPPORTED | P9, rows 9 and 14 | Q4 | Pending |
+| Random reply tokens; DMARC "gray" still auto-links | D2 | Q7 | Pending |
+| Buyer GSTIN is not checked: stated limitation | Section 15 | Q8 | Pending |
+| Bank, vendor and sender overrides need a callback record and a second confirmation | Row 9 | Q9 | Pending |
+| Undoing an approval before export | Section 11 | Q10 | Deferred |
+| Demo reset requires DEMO_ADMIN_KEY | Demo tools | Q5 | Implemented (a92657f) |

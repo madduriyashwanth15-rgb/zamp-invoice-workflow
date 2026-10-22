@@ -17,6 +17,20 @@ import {
 // Rule order and normalisation follow spec section 16; codes and evidence follow sections 9-10.
 
 const INVOICE_WORDS = ["invoice", "tax invoice", "bill of supply"];
+
+/**
+ * G1b (spec v1.4): wording that says a document "read as an invoice" is something else. Whole words only.
+ * The title words come from the reading; the text words are checked against the document's own text layer, so a
+ * misread title cannot hide them. A real tax invoice may mention the quotation it follows, hence the INVOICE_TEXT
+ * exemption for quotation, estimate and challan (but never for proforma).
+ */
+const NOT_INVOICE_TITLE = /\b(quotation|quote|estimate|pro[\s-]?forma|challan|statement)\b/i;
+const PROFORMA_TEXT = /\bpro[\s-]?forma\b/i;
+const NOT_INVOICE_TEXT = /\b(quotation|estimate|delivery\s+challan)\b/i;
+const INVOICE_TEXT = /\b(tax\s+invoice|bill\s+of\s+supply)\b/i;
+
+/** K4b (spec v1.4): wording that shows a bank account is printed, so "no account read" is a misread, not an absence. */
+export const BANK_WORDING = /(?<![a-z])(a\/c|account\s*(no|number)|ifsc)(?![a-z])/i;
 const PAYABLE = new Set(["CLEARED", "APPROVED"]);
 const HOLD_FAMILY = new Set(["ON_HOLD", "AWAITING_VENDOR"]);
 
@@ -118,7 +132,20 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
   t.note(`AI doc_type: ${ex.doc_type}; title "${ex.document_title ?? ""}"; number label "${ex.number_label ?? ""}"`);
   if (ex.doc_type === "credit_note") {
     t.add("CREDIT_NOTE_UNSUPPORTED", "Credit notes are not processed (G3)", { doc_type: ex.doc_type, title: ex.document_title });
-  } else if (ex.doc_type !== "invoice") {
+  } else if (ex.doc_type === "invoice") {
+    const inTitle = NOT_INVOICE_TITLE.exec(titleAndLabel);
+    const proforma = PROFORMA_TEXT.exec(doc.text_layer);
+    const otherDoc = NOT_INVOICE_TEXT.exec(doc.text_layer);
+    const hit = inTitle ? { word: inTitle[0], where: "title or number label" }
+      : proforma ? { word: proforma[0], where: "document text" }
+      : otherDoc && !INVOICE_TEXT.test(doc.text_layer) ? { word: otherDoc[0], where: "document text" }
+      : null;
+    if (hit) {
+      t.add("CLASSIFICATION_CONFLICT", `Read as an invoice, but the document's wording says "${hit.word}" (G1b)`, {
+        doc_type: ex.doc_type, title: ex.document_title, number_label: ex.number_label, word: hit.word, found_in: hit.where,
+      });
+    }
+  } else {
     if (invoiceWording) {
       t.add("CLASSIFICATION_CONFLICT", "AI says this is not an invoice, but the title or number label says invoice (G2)", {
         doc_type: ex.doc_type, title: ex.document_title, number_label: ex.number_label,
@@ -223,7 +250,13 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
     for (const st of ["duplicates", "po", "lines", "compare"] as StageId[]) t.notEvaluated(st, "vendor unknown");
     return decide(t, result, input);
   }
-  if (!ex.bank_account_last4) {
+  const printedBank = !ex.bank_account_last4 && !ex.bank_account_number ? BANK_WORDING.exec(doc.text_layer) : null;
+  if (printedBank) {
+    t.add("MISSING_REQUIRED_FIELD", "A bank account is printed on the document but was not read; it cannot be checked against the vendor master (K4b)", {
+      field: "bank account", printed_wording: printedBank[0], master_last4: vendor.bank_last4,
+      action: `Read the account on the document and compare it with the master (ending ${vendor.bank_last4}); if it differs, verify by phone using ${vendor.phone}`,
+    });
+  } else if (!ex.bank_account_last4) {
     t.add("BANK_NOT_SHOWN", "No bank account printed; nothing to compare (K4)", { master_last4: vendor.bank_last4 });
   } else if (ex.bank_account_last4 !== vendor.bank_last4) {
     t.add("BANK_DETAILS_CHANGED", "Bank account differs from the trusted vendor master (K4)", {

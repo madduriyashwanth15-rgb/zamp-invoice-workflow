@@ -302,10 +302,12 @@ describe("bank account: the model copies the number, code takes the last 4 digit
     expect(changed.run.blocking_codes).toContain("BANK_DETAILS_CHANGED");
   });
 
-  it("no account printed -> null (BANK_NOT_SHOWN, nothing to compare)", async () => {
+  it("the model returns no account although S3 prints one -> null, and the run is held (K4b, spec v1.4)", async () => {
+    // Before v1.4 this ended with info BANK_NOT_SHOWN and could clear; the document's own text shows an account.
     const { run } = await readS3({ bank_account_number: null, bank_account_last4: null });
     expect(run.extraction?.bank_account_last4).toBeNull();
-    expect(run.info_codes).toContain("BANK_NOT_SHOWN");
+    expect(run.blocking_codes).toContain("MISSING_REQUIRED_FIELD");
+    expect(run.info_codes).not.toContain("BANK_NOT_SHOWN");
   });
 });
 
