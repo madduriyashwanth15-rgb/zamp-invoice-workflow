@@ -58,18 +58,36 @@ const DECIMAL_FIELDS = ["subtotal", "cgst", "sgst", "igst", "tax_total", "total"
 const LINE_DECIMALS = ["qty", "unit_price", "amount", "gst_rate"] as const;
 
 /** Models sometimes send numbers where we asked for decimal strings; convert without arithmetic. */
+/**
+ * A number copied with its thousands separators ("6,000.00", Indian "1,00,000.00") loses only the separators.
+ * Anything else (a decimal comma, a currency sign, words) is left for the schema to reject.
+ */
+function ungroup(v: unknown): unknown {
+  if (typeof v === "number") return String(v);
+  if (typeof v === "string" && /^\d{1,3}(,\d{2,3})+(\.\d+)?$/.test(v.trim())) return v.trim().replace(/,/g, "");
+  return v;
+}
+
 function coerce(raw: unknown): unknown {
   if (!raw || typeof raw !== "object") return raw;
   const o = { ...(raw as Record<string, unknown>) };
-  for (const f of DECIMAL_FIELDS) if (typeof o[f] === "number") o[f] = String(o[f]);
+  for (const f of DECIMAL_FIELDS) o[f] = ungroup(o[f]);
   if (Array.isArray(o.lines)) {
     o.lines = o.lines.map((l: Record<string, unknown>) => {
       const x = { ...l };
-      for (const f of LINE_DECIMALS) if (typeof x[f] === "number") x[f] = String(x[f]);
+      for (const f of LINE_DECIMALS) x[f] = ungroup(x[f]);
       if (typeof x.hsn_sac === "number") x.hsn_sac = String(x.hsn_sac);
       return x;
     });
   }
+  // The model copies the account number; code takes the last 4 digits (live run, 22 Oct: asked for "the last 4",
+  // the model answered 2778 for A/c 30987654327781). An answer that put the whole number into the last-4 field is
+  // read the same way.
+  const digits = (v: unknown) => (typeof v === "string" || typeof v === "number" ? String(v).replace(/\D/g, "") : "");
+  const printed = digits(o.bank_account_number);
+  const short = digits(o.bank_account_last4);
+  o.bank_account_last4 = printed.length >= 4 ? printed.slice(-4) : short.length >= 4 ? short.slice(-4) : null;
+  if (typeof o.bank_account_number === "number") o.bank_account_number = String(o.bank_account_number);
   if (o.currency == null) o.currency = "INR";
   if (o.revision_marker == null) o.revision_marker = false;
   return o;

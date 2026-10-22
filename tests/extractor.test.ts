@@ -65,6 +65,27 @@ describe("GeminiExtractor through the pipeline (MOCK provider)", () => {
     expect(run.extraction?.total).toBe(String(Number(s1().total)));
   });
 
+  it("live run 22 Oct (S7): amounts copied with thousands separators are accepted in one call; other formats still rejected", async () => {
+    const e = s1();
+    const lines = e.lines as Record<string, unknown>[];
+    const amount = String(lines[0].amount);
+    const grouped = Number(amount).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    expect(grouped).toContain(",");
+    lines[0].amount = grouped;
+    e.total = Number(e.total).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const { deps, transport } = withGemini([ok(e)]);
+    const run = await deliver(deps, "S1", {});
+    expect(transport.requests).toHaveLength(1);
+    expect(run.state).toBe("CLEARED");
+    expect(run.extraction?.lines[0].amount).toBe(Number(amount).toFixed(2));
+
+    const bad = s1();
+    bad.total = "Rs. 18,880.00"; // a currency sign is not silently cleaned: the schema rejects it and the model is asked again
+    const second = withGemini([ok(bad), ok(s1())]);
+    await deliver(second.deps, "S1", {});
+    expect(second.transport.requests).toHaveLength(2);
+  });
+
   it("F1: schema-invalid twice -> ON_HOLD EXTRACTION_FAILED; the second call carries the validation errors", async () => {
     const bad = { ...s1(), doc_type: "receipt" };
     const { deps, transport } = withGemini([ok(bad), ok(bad)]);
@@ -248,6 +269,43 @@ describe("time budget (Vercel Hobby stops a function at 300 s)", () => {
     expect(timeoutOf({ GEMINI_TIMEOUT_MS: "45000" })).toBe(45_000);
     expect(timeoutOf({ GEMINI_TIMEOUT_MS: "600000" })).toBe(60_000);
     expect(timeoutOf({})).toBe(60_000);
+  });
+});
+
+describe("bank account: the model copies the number, code takes the last 4 digits", () => {
+  const s3 = () => structuredClone(tests.get("S3")!.expected_extraction) as Record<string, unknown>;
+  const readS3 = async (patch: Record<string, unknown>) => {
+    const answer = { ...s3(), ...patch };
+    const { deps, transport } = withGemini([ok(answer)]);
+    const run = await deliver(deps, "S3", {});
+    return { run, calls: transport.requests.length };
+  };
+
+  it("live run 22 Oct: A/c 30987654327781 with a wrong last-4 from the model -> 7781 from the copied number, one call", async () => {
+    const { run, calls } = await readS3({ bank_account_number: "30987654327781", bank_account_last4: "2778" });
+    expect(calls).toBe(1);
+    expect(run.extraction?.bank_account_last4).toBe("7781");
+    expect(run.extraction?.bank_account_number).toBe("30987654327781");
+    expect(run.blocking_codes).not.toContain("BANK_DETAILS_CHANGED");
+    expect(run.blocking_codes).toEqual(["PRICE_OVER_TOLERANCE"]); // S3's own expected hold, nothing else
+  });
+
+  it("the whole number put into the last-4 field is read the same way (no retry needed)", async () => {
+    const { run, calls } = await readS3({ bank_account_last4: "30987654327781" });
+    expect(calls).toBe(1);
+    expect(run.extraction?.bank_account_last4).toBe("7781");
+  });
+
+  it("a masked number keeps its visible digits; a different account still holds BANK_DETAILS_CHANGED", async () => {
+    expect((await readS3({ bank_account_number: "XXXX XXXX 7781", bank_account_last4: null })).run.extraction?.bank_account_last4).toBe("7781");
+    const changed = await readS3({ bank_account_number: "30987654320042", bank_account_last4: null });
+    expect(changed.run.blocking_codes).toContain("BANK_DETAILS_CHANGED");
+  });
+
+  it("no account printed -> null (BANK_NOT_SHOWN, nothing to compare)", async () => {
+    const { run } = await readS3({ bank_account_number: null, bank_account_last4: null });
+    expect(run.extraction?.bank_account_last4).toBeNull();
+    expect(run.info_codes).toContain("BANK_NOT_SHOWN");
   });
 });
 

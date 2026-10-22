@@ -42,6 +42,8 @@ const extraction = z.object({
   tax_total: amount.nullable(),
   total: amount.nullable(),
   bank_account_last4: z.string().regex(/^\d{4}$/).nullable(),
+  /** The account number as printed, when the reader copied it; bank_account_last4 is then derived from it by code. */
+  bank_account_number: z.string().nullable().optional(),
   revision_marker: z.boolean(),
   currency: z.string(),
 });

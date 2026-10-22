@@ -21,6 +21,20 @@ const FIELDS = [
   "subtotal", "cgst", "sgst", "tax_total", "total", "bank_account_last4",
 ];
 
+/**
+ * The answer key sometimes holds a value the document does not print (live run, 22 Oct: "0.00" CGST/SGST for the
+ * GST-exempt Kumar invoices, which print no tax lines; a bank account for the S9 quotation, which prints none). A
+ * null read where the document has no such label at all is the correct transcription, so it is reported separately
+ * as "not printed", not as a misread. Only for documents with a text layer: on a scan nothing can be checked this way.
+ */
+const LABELS: Record<string, RegExp> = {
+  cgst: /\bCGST\b/i,
+  sgst: /\bSGST\b/i,
+  igst: /\bIGST\b/i,
+  tax_total: /total\s*(gst|tax)|(gst|tax)\s*total/i,
+  bank_account_last4: /a\/c|account\s*(no|number)/i,
+};
+
 /** Spaces calls out to stay under the free tier's requests-per-minute limit. */
 class PacedTransport implements GeminiTransport {
   calls = 0;
@@ -42,22 +56,29 @@ describe.skipIf(!key || !model)("LIVE golden run: 18 test invoices read by the r
     const proposer = new GeminiMappingProposer({ model: model!, transport, reference });
     const started = Date.now();
     const results = await runGolden({ extractor, proposer });
-    const rows = results.map((e) => {
+    const rows = [];
+    for (const e of results) {
       const t = e.test;
       const exp = t.expected as { outcome: string; blocking: string[]; info: string[] };
       const pr = passRule(e);
-      const diffs = e.run.extraction ? extractionDiffs(t.expected_extraction as Extraction, e.run.extraction, (t.critical_fields as string[] | null) ?? FIELDS) : null;
-      return {
+      const all = e.run.extraction ? extractionDiffs(t.expected_extraction as Extraction, e.run.extraction, (t.critical_fields as string[] | null) ?? FIELDS) : null;
+      const doc = await e.store.read((s) => s.documents.get(e.run.run_id));
+      const text = doc?.has_text_layer ? doc.text_layer : null;
+      const notPrinted = (d: { field: string; actual: unknown }) => text !== null && d.actual == null && LABELS[d.field] !== undefined && !LABELS[d.field].test(text);
+      const diffs = all ? all.filter((d) => !notPrinted(d)) : null;
+      rows.push({
         test_id: t.test_id, pass: pr.pass, problems: pr.problems, field_differences: diffs,
+        not_printed_on_document: all ? all.filter(notPrinted) : [],
         state: e.run.state, blocking: e.run.blocking_codes, info: e.run.info_codes,
         expected_outcome: exp.outcome, expected_blocking: exp.blocking, expected_info: exp.info,
         extracted_by: e.run.extracted_by, failure: e.run.failure,
-      };
-    });
+      });
+    }
     const summary = {
       model, api: process.env.GEMINI_API ?? "interactions", at: new Date().toISOString(), seconds: Math.round((Date.now() - started) / 1000),
       provider_calls: transport.calls, tests: rows.length, passed_pass_rule: rows.filter((r) => r.pass).length,
       tests_with_field_differences: rows.filter((r) => r.field_differences === null || r.field_differences.length > 0).length,
+      tests_with_answer_key_values_not_printed: rows.filter((r) => r.not_printed_on_document.length > 0).length,
     };
     mkdirSync("reports", { recursive: true });
     writeFileSync(`reports/live-golden-${model!.replace(/[^a-z0-9.-]/gi, "_")}.json`, JSON.stringify({ summary, results: rows }, null, 2));

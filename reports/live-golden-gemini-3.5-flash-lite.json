@@ -1,0 +1,533 @@
+{
+  "summary": {
+    "model": "gemini-3.5-flash-lite",
+    "api": "interactions",
+    "at": "2026-10-22T08:15:27.014Z",
+    "seconds": 201,
+    "provider_calls": 23,
+    "tests": 18,
+    "passed_pass_rule": 18,
+    "tests_with_field_differences": 5
+  },
+  "results": [
+    {
+      "test_id": "S1",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "CLEARED",
+      "blocking": [],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "CLEARED",
+      "expected_blocking": [],
+      "expected_info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S2",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "ON_HOLD",
+      "blocking": [
+        "BANK_DETAILS_CHANGED"
+      ],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "BANK_DETAILS_CHANGED"
+      ],
+      "expected_info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S3",
+      "pass": true,
+      "problems": [],
+      "field_differences": [
+        {
+          "field": "cgst",
+          "expected": "0.00",
+          "actual": null
+        },
+        {
+          "field": "sgst",
+          "expected": "0.00",
+          "actual": null
+        },
+        {
+          "field": "tax_total",
+          "expected": "0.00",
+          "actual": null
+        }
+      ],
+      "state": "ON_HOLD",
+      "blocking": [
+        "PRICE_OVER_TOLERANCE"
+      ],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "PRICE_OVER_TOLERANCE"
+      ],
+      "expected_info": [],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S4",
+      "pass": true,
+      "problems": [],
+      "field_differences": [
+        {
+          "field": "cgst",
+          "expected": "0.00",
+          "actual": null
+        },
+        {
+          "field": "sgst",
+          "expected": "0.00",
+          "actual": null
+        },
+        {
+          "field": "tax_total",
+          "expected": "0.00",
+          "actual": null
+        }
+      ],
+      "state": "CLEARED",
+      "blocking": [],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE",
+        "CORRECTION_OF"
+      ],
+      "expected_outcome": "CLEARED",
+      "expected_blocking": [],
+      "expected_info": [
+        "CORRECTION_OF"
+      ],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 2,
+        "cached": false,
+        "retries": [
+          "call 1 (gemini-3.5-flash-lite): network fetch failed (19 s)"
+        ]
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S5",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "REJECTED",
+      "blocking": [
+        "DUPLICATE_INVOICE"
+      ],
+      "info": [],
+      "expected_outcome": "REJECTED",
+      "expected_blocking": [
+        "DUPLICATE_INVOICE"
+      ],
+      "expected_info": [],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S6a",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "CLEARED",
+      "blocking": [],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "CLEARED",
+      "expected_blocking": [],
+      "expected_info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S6b",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "ON_HOLD",
+      "blocking": [
+        "QTY_EXCEEDS_PO",
+        "PO_AMOUNT_EXCEEDED"
+      ],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "QTY_EXCEEDS_PO",
+        "PO_AMOUNT_EXCEEDED"
+      ],
+      "expected_info": [],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S7",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "ON_HOLD",
+      "blocking": [
+        "SCAN_UNVERIFIED"
+      ],
+      "info": [
+        "PO_INFERRED",
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "SCAN_UNVERIFIED"
+      ],
+      "expected_info": [
+        "PO_INFERRED"
+      ],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 2,
+        "cached": false,
+        "retries": [
+          "call 1: answer rejected by validation (lines.0.unit_price: Invalid string: must match pattern /^\\d+(\\.\\d{1,4})?$/; lines.0.amount: Invalid string: must match pattern /^\\d+(\\.\\d{1,2})?$/; lines.1.amount: Invalid string: must match pattern /^\\d+(\\.\\d{1,2})?$/)"
+        ]
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S8",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "ON_HOLD",
+      "blocking": [
+        "VENDOR_UNKNOWN",
+        "SENDER_UNVERIFIED"
+      ],
+      "info": [],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "VENDOR_UNKNOWN",
+        "SENDER_UNVERIFIED"
+      ],
+      "expected_info": [],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S9",
+      "pass": true,
+      "problems": [],
+      "field_differences": [
+        {
+          "field": "bank_account_last4",
+          "expected": "4417",
+          "actual": null
+        }
+      ],
+      "state": "SKIPPED",
+      "blocking": [
+        "NOT_INVOICE"
+      ],
+      "info": [],
+      "expected_outcome": "SKIPPED",
+      "expected_blocking": [
+        "NOT_INVOICE"
+      ],
+      "expected_info": [],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S10",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "ON_HOLD",
+      "blocking": [
+        "ARITHMETIC_MISMATCH"
+      ],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "ARITHMETIC_MISMATCH"
+      ],
+      "expected_info": [],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S11",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "CLEARED",
+      "blocking": [],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "CLEARED",
+      "expected_blocking": [],
+      "expected_info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S12",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "ON_HOLD",
+      "blocking": [
+        "BUNDLED_QUANTITY_UNVERIFIED"
+      ],
+      "info": [],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "BUNDLED_QUANTITY_UNVERIFIED"
+      ],
+      "expected_info": [],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S13",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "CLEARED",
+      "blocking": [],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "CLEARED",
+      "expected_blocking": [],
+      "expected_info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "S14",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "CLEARED",
+      "blocking": [],
+      "info": [
+        "LINE_MAPPED_AI_VERIFIED",
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "CLEARED",
+      "expected_blocking": [],
+      "expected_info": [
+        "LINE_MAPPED_AI_VERIFIED",
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "X1",
+      "pass": true,
+      "problems": [],
+      "field_differences": [
+        {
+          "field": "cgst",
+          "expected": "0.00",
+          "actual": null
+        },
+        {
+          "field": "sgst",
+          "expected": "0.00",
+          "actual": null
+        },
+        {
+          "field": "tax_total",
+          "expected": "0.00",
+          "actual": null
+        }
+      ],
+      "state": "ON_HOLD",
+      "blocking": [
+        "PRICE_OVER_TOLERANCE"
+      ],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE",
+        "CORRECTION_CANDIDATE_OF"
+      ],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "PRICE_OVER_TOLERANCE"
+      ],
+      "expected_info": [
+        "CORRECTION_CANDIDATE_OF"
+      ],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "X2",
+      "pass": true,
+      "problems": [],
+      "field_differences": [
+        {
+          "field": "cgst",
+          "expected": "0.00",
+          "actual": null
+        },
+        {
+          "field": "sgst",
+          "expected": "0.00",
+          "actual": null
+        },
+        {
+          "field": "tax_total",
+          "expected": "0.00",
+          "actual": null
+        }
+      ],
+      "state": "ON_HOLD",
+      "blocking": [
+        "CORRECTION_UNCONFIRMED"
+      ],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "CORRECTION_UNCONFIRMED"
+      ],
+      "expected_info": [],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    },
+    {
+      "test_id": "X3",
+      "pass": true,
+      "problems": [],
+      "field_differences": [],
+      "state": "ON_HOLD",
+      "blocking": [
+        "UNAPPROVED_CHARGE"
+      ],
+      "info": [
+        "PRICE_WITHIN_TOLERANCE"
+      ],
+      "expected_outcome": "ON_HOLD",
+      "expected_blocking": [
+        "UNAPPROVED_CHARGE"
+      ],
+      "expected_info": [],
+      "extracted_by": {
+        "extractor": "Gemini gemini-3.5-flash-lite (extract-v3)",
+        "attempts": 1,
+        "cached": false,
+        "retries": []
+      },
+      "failure": null
+    }
+  ]
+}
