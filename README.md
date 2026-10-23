@@ -3,7 +3,8 @@
 Vendors email invoices (or a reviewer uploads them). Each one is read, checked against the vendor master and the
 purchase order, and decided: **Cleared by checks**, **On hold** with the reasons, **Rejected** (duplicate) or
 **Skipped** (not an invoice). A person approves cleared invoices for the payment list and exports it for finance.
-All data is fictional (SpiceRoute Kitchens and its suppliers).
+The companies, invoices and purchase orders (SpiceRoute Kitchens and its suppliers) are fictional test data. On the
+live demo, my own mailboxes are registered as vendor sender addresses so that I can email invoices in for testing.
 
 ## How a decision is made
 
@@ -105,6 +106,17 @@ matrix pass rule; it must also agree with the independent oracle (`oracle_result
   approve; production needs authenticated staff and role checks.
 - Uploads are trusted as internal actions (no sender check).
 - V3 is a presence check: it catches values the document does not contain, not a misread that matches another value on the page.
+  Amounts must appear as the same whole number (a misread 1300.00 is not vouched for by a printed 13,000.00).
+- Line matching by description (M1) accepts an invoice line that contains every word of the PO line, so "Food
+  container lid 500 ml" matches "Food container 500 ml". AI-proposed matches are held to a stricter rule (two item
+  words in common, including the word that names the item); the deterministic M1 match is not.
+- Duplicate checks work on the vendor and invoice number. A re-scan whose vendor was misread is caught when it has the
+  same total and the same number or date as a payable copy (it is held, or approving it needs a second confirmation);
+  a copy whose vendor, number and date were all misread is not linked to the original unless it is the same file.
+- A vendor's reply to a correction request for an invoice that could not be read arrives as a new invoice; the
+  original is then rejected by hand.
+- Overriding a bank, vendor, GSTIN or sender hold needs a recorded call to the vendor-master number. The call time has
+  no earliest limit, because a vendor may call about a bank change before sending the invoice.
 - "Paid" is never shown: payment happens in finance's own process after export.
 - Accuracy figures describe this synthetic test set only. Free-tier AI content may be used by the provider: use fictional data only.
 - Correction emails are written by code and sent through Resend. Without a verified domain, Resend's test sender only
