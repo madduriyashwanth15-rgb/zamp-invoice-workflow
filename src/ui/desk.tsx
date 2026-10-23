@@ -5,13 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowDownToLine, BadgeCheck, ChevronRight, FileSpreadsheet, FileUp, Inbox, Mail, Search, Upload, UserRound } from "lucide-react";
 import type { RunSummary } from "@/server/views";
-import { formatDate, formatInr, formatTime, sumRupees } from "@/lib/format";
+import { formatDate, formatInr, formatTime, istDate, sumRupees } from "@/lib/format";
 import { TIER_ORDER, TIER_TEXT, type IssueTier } from "@/lib/issue-tier";
 import { api, errorText, type Listing } from "./api";
 import { SHORT_STATE, SlipStrip, SlipSwatch, StateChip, TierBadge } from "./chips";
 import { useIdentity } from "./identity";
 import { Button, Dialog, EmptyState, Notice, Skeleton, btn, cx, inputCls } from "./kit";
-import { SORTS, VIEWS, defaultSort, exportable, isReading, sortRuns, viewOf, type SortId, type ViewId } from "./queue";
+import { SORTS, VIEWS, ageText, defaultSort, dueInDays, dueText, exportable, isReading, sortRuns, viewOf, type SortId, type ViewId } from "./queue";
 import { useRuns } from "./runs-context";
 import { PageHeader } from "./shell";
 
@@ -585,6 +585,8 @@ function RunTable({ view, runs, total, filtered, onChanged }: { view: ViewId; ru
 
   const open = (r: RunSummary) => router.push(`/runs/${r.run_id}`);
   const e = EMPTY[view];
+  // Ageing and due dates are counted in India calendar days (gap 12); read once per mount.
+  const [today] = useState(() => istDate());
 
   return (
     <div>
@@ -643,7 +645,10 @@ function RunTable({ view, runs, total, filtered, onChanged }: { view: ViewId; ru
                     <Link href={`/runs/${r.run_id}`} className="min-w-0 break-words font-semibold text-ink hover:text-carbon-deep hover:underline">
                       {r.vendor ?? r.filename ?? "Unread document"}
                     </Link>
-                    <span className="num shrink-0 font-semibold">{r.total ?? <span className="font-normal text-ink-3">not read</span>}</span>
+                    <span className="shrink-0 text-right">
+                      <span className="num font-semibold">{r.total ?? <span className="font-normal text-ink-3">not read</span>}</span>
+                      <DueNote r={r} today={today} />
+                    </span>
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink-2">
                     <InvoiceLine r={r} />
@@ -724,7 +729,10 @@ function RunTable({ view, runs, total, filtered, onChanged }: { view: ViewId; ru
                         <InvoiceLine r={r} />
                       </div>
                     </td>
-                    <td className="num px-4 py-3 text-right font-semibold whitespace-nowrap">{r.total ?? <span className="font-normal text-ink-3">not read</span>}</td>
+                    <td className="num px-4 py-3 text-right font-semibold whitespace-nowrap">
+                      {r.total ?? <span className="font-normal text-ink-3">not read</span>}
+                      <DueNote r={r} today={today} />
+                    </td>
                     <td className="px-4 py-3">
                       <StateChip tone={r.tone} label={r.state_label} short={SHORT_STATE[r.state]} exported={r.exported} size="sm" />
                       <div className="mt-2">
@@ -738,6 +746,7 @@ function RunTable({ view, runs, total, filtered, onChanged }: { view: ViewId; ru
                       <span className="flex items-center gap-1.5">
                         {r.source === "email" ? <Mail aria-hidden size={13} className="text-ink-3" /> : <UserRound aria-hidden size={13} className="text-ink-3" />}
                         {formatTime(r.created_at)}
+                        <Age r={r} today={today} />
                       </span>
                       <span className="block max-w-[12rem] truncate text-[12px] text-ink-3" title={r.received_from ?? undefined}>
                         {r.source === "email" ? r.received_from : `${r.received_from} (demo identity)`}
@@ -875,6 +884,27 @@ function BatchBar({
       </Dialog>
     </>
   );
+}
+
+/** The due date (per terms) as a distance from today, while the invoice still waits for payment (gap 12). */
+function DueNote({ r, today }: { r: RunSummary; today: string }) {
+  const days = dueInDays(r, today);
+  if (days == null) return null;
+  const { text, tone } = dueText(days);
+  return (
+    <span
+      title={`Due (per terms) ${formatDate(r.due_per_terms)}`}
+      className={cx("block text-[12px]", tone === "overdue" ? "font-semibold text-bad-fg" : tone === "soon" ? "font-medium text-hold-fg" : "font-normal text-ink-3")}
+    >
+      {text}
+    </span>
+  );
+}
+
+/** How long ago it arrived, from the day after it arrived ("2 days ago"). */
+function Age({ r, today }: { r: RunSummary; today: string }) {
+  const text = ageText(istDate(new Date(r.created_at)), today);
+  return text === "today" ? null : <span className="text-ink-3">· {text}</span>;
 }
 
 function InvoiceLine({ r }: { r: RunSummary }) {

@@ -3,6 +3,7 @@ import { REASON_CODES } from "@/domain/codes";
 import Decimal from "decimal.js";
 import type { Finding, LineMatch, ReferenceData, StageStatus } from "@/domain/engine/types";
 import { paiseToRupees } from "@/domain/money";
+import { addDays } from "@/domain/dates";
 import { availableActions, sameInvoicePayable, vendorCanFix, type ActionOption } from "@/domain/runs/queries";
 import type { Approval, AuditEvent, CorrectionRequest, ExportRecord, Logs, RunRecord, RunTiming, StoreState, StoredDocument } from "@/domain/runs/types";
 import { nextToken } from "@/domain/runs/actions";
@@ -42,6 +43,11 @@ export interface RunSummary {
   /** False when the purchase-order check did not run, so "none matched" would be untrue. */
   po_checked: boolean;
   due_date: string | null;
+  /**
+   * Display only (gap 12): the recorded due date, or for an invoice not cleared yet, its invoice date plus the
+   * matched vendor's payment terms (the same formula the engine records on clearing). Null for an unknown vendor.
+   */
+  due_per_terms: string | null;
   primary: CodeView | null;
   blocking_count: number;
   exported: boolean;
@@ -188,6 +194,7 @@ export function summarize(run: RunRecord, ref: ReferenceData, state?: Pick<Store
     total: run.total_paise != null ? fmtRupees(run.total_paise) : formatInr(run.extraction?.total),
     total_rupees: run.total_paise != null ? paiseToRupees(run.total_paise) : null,
     po_number: run.po_number, po_checked: Boolean(run.po_number) || evaluated(run, "po"), due_date: run.due_date,
+    due_per_terms: run.due_date ?? termsDue(run.invoice_date ?? run.extraction?.invoice_date ?? null, vendor?.payment_terms_days),
     primary: run.state === "CLEARED" || run.state === "APPROVED" || run.state === "SUPERSEDED" ? null : primary,
     blocking_count: run.blocking_codes.length, exported: run.exported, export_id: run.export_id, export_blocked: run.export_blocked,
     version: run.version, created_at: run.created_at, updated_at: run.updated_at, filename: run.filename,
@@ -196,6 +203,9 @@ export function summarize(run: RunRecord, ref: ReferenceData, state?: Pick<Store
     tiers: holdTiers(run),
   };
 }
+
+const termsDue = (invoiceDate: string | null, terms: number | undefined) =>
+  invoiceDate && terms != null && /^\d{4}-\d{2}-\d{2}$/.test(invoiceDate) ? addDays(invoiceDate, terms) : null;
 
 /** Tiers of the holds still open: blocking findings (with their evidence, for an unread bank account) and run-level holds. */
 function holdTiers(run: RunRecord): IssueTier[] {

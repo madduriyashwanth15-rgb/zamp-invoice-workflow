@@ -48,3 +48,8 @@ export function formatSeconds(ms: number): string {
   if (ms < 10) return "under 0.01 s";
   return ms < 995 ? `${(ms / 1000).toFixed(2)} s` : `${(ms / 1000).toFixed(1)} s`;
 }
+
+/** The calendar date in India for a moment (invoices, due dates and ageing use Indian business dates). */
+export function istDate(d: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}

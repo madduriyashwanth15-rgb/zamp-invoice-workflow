@@ -54,9 +54,44 @@ const paiseOf = (r: RunSummary) => {
   return m[1] ? -p : p;
 };
 
-export type SortId = "serious" | "newest" | "oldest" | "amount" | "vendor";
+// ---- ageing (review gap 12): display only, from dates already on the run; nothing is sent or escalated.
+
+/** Whole calendar days from one ISO date to another (negative when `to` is earlier). */
+export function daysBetween(from: string, to: string): number {
+  const day = (iso: string) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+  return Math.round((day(to) - day(from)) / 86_400_000);
+}
+
+/** Still to be paid by finance's process: the due date (per terms) matters on the desk. Exported or closed: it does not. */
+const awaitingPayment = (r: RunSummary) =>
+  r.state === "CLEARED" || r.state === "ON_HOLD" || r.state === "AWAITING_VENDOR" || (r.state === "APPROVED" && !r.exported);
+
+/** Days until the due date (per terms) from `today` (both India dates); null when not tracked for this invoice. */
+export function dueInDays(r: RunSummary, today: string): number | null {
+  return r.due_per_terms && awaitingPayment(r) ? daysBetween(today, r.due_per_terms) : null;
+}
+
+export type DueTone = "overdue" | "soon" | "later";
+
+/** "due today", "due in 3 days", "overdue by 2 days"; soon is within 3 days. */
+export function dueText(days: number): { text: string; tone: DueTone } {
+  const d = (n: number) => `${n} day${n === 1 ? "" : "s"}`;
+  if (days < 0) return { text: `overdue by ${d(-days)}`, tone: "overdue" };
+  if (days === 0) return { text: "due today", tone: "soon" };
+  if (days === 1) return { text: "due tomorrow", tone: "soon" };
+  return { text: `due in ${d(days)}`, tone: days <= 3 ? "soon" : "later" };
+}
+
+/** "today", "yesterday", "5 days ago": how long ago an invoice arrived, by India calendar dates. */
+export function ageText(receivedOn: string, today: string): string {
+  const n = daysBetween(receivedOn, today);
+  return n <= 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`;
+}
+
+export type SortId = "serious" | "due" | "newest" | "oldest" | "amount" | "vendor";
 export const SORTS: { id: SortId; label: string }[] = [
   { id: "serious", label: "Most serious first" },
+  { id: "due", label: "Due soonest (per terms)" },
   { id: "newest", label: "Newest first" },
   { id: "oldest", label: "Oldest first" },
   { id: "amount", label: "Amount, highest first" },
@@ -69,6 +104,14 @@ export function sortRuns(rs: RunSummary[], by: SortId): RunSummary[] {
   const time = (r: RunSummary) => r.created_at;
   const copy = [...rs];
   switch (by) {
+    case "due":
+      // Earliest due date first; invoices with no due date (not read, or exported or closed) last, newest first.
+      return copy.sort((a, b) => {
+        const x = awaitingPayment(a) ? a.due_per_terms : null;
+        const y = awaitingPayment(b) ? b.due_per_terms : null;
+        if (x == null || y == null) return x == null ? (y == null ? time(b).localeCompare(time(a)) : 1) : -1;
+        return x.localeCompare(y) || time(b).localeCompare(time(a));
+      });
     case "serious":
       return copy.sort((a, b) => tierRank(a) - tierRank(b) || time(b).localeCompare(time(a)));
     case "newest":
