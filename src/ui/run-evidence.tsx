@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ArrowUpRight, Check, ChevronDown, CircleAlert, ExternalLink, FileText, Minus, ScanLine, ShieldCheck, User, X } from "lucide-react";
+import { ArrowDownToLine, ArrowUpRight, Check, ChevronDown, CircleAlert, ExternalLink, FileText, Minus, ScanLine, ShieldCheck, User, X } from "lucide-react";
 import type { FindingView, PoTableView, RunDetail, StageView } from "@/server/views";
 import { formatDate, formatInr, formatSeconds, formatTime } from "@/lib/format";
 import { CODE_TEXT, STATE_TEXT } from "@/lib/reason-text";
@@ -631,7 +631,17 @@ function eventText(e: RunDetail["events"][number]): string {
 
 export function History({ run }: { run: RunDetail }) {
   return (
-    <Panel title="History" description="Every change and refusal, as recorded. Names are demo identities, not verified users." flush>
+    <Panel
+      title="History"
+      description="Every change and refusal, as recorded. Names are demo identities, not verified users."
+      actions={
+        <a href="/api/audit" className="inline-flex items-center gap-1 text-[12px] font-semibold text-carbon-deep hover:underline">
+          <ArrowDownToLine aria-hidden size={13} />
+          Whole audit log (CSV)
+        </a>
+      }
+      flush
+    >
       <ol className="relative px-4 py-2">
         <span aria-hidden className="absolute top-5 bottom-5 left-[1.6rem] w-px bg-rule" />
         {run.events.map((e) => {

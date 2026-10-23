@@ -531,7 +531,13 @@ function ApprovedBar({ listing, onExport }: { listing: Listing; onExport: () => 
 function ExportHistory({ listing }: { listing: Listing }) {
   return (
     <div className="border-b border-rule px-4 py-3">
-      <h3 className="text-[13px] font-semibold text-ink">Payment lists exported</h3>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-[13px] font-semibold text-ink">Payment lists exported</h3>
+        <a href="/api/audit" className="inline-flex items-center gap-1 text-[13px] font-semibold text-carbon-deep hover:underline">
+          <ArrowDownToLine aria-hidden size={14} />
+          Audit log (CSV, every event)
+        </a>
+      </div>
       <ul className="mt-2 divide-y divide-rule rounded-md border border-rule text-[13px]">
         {listing.exports.map((x) => {
           const rs = listing.runs.filter((r) => r.export_id === x.export_id);

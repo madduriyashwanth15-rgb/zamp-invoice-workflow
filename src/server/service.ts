@@ -150,6 +150,25 @@ export async function exportCsv(exportId: string): Promise<string | null> {
   return [header.join(","), ...rows.map((r) => r.join(","))].join("\r\n") + "\r\n";
 }
 
+/** Gap 15: the whole audit trail as CSV, every event in order (read-only). Names are demo identities. */
+export async function auditCsv(): Promise<string> {
+  const { deps } = runtime();
+  const logs = await deps.store.logs();
+  const refs = await deps.store.read((s) => new Map([...s.runs.values()].map((r) => [r.run_id, r.ref])));
+  const header = ["seq", "at", "run_ref", "run_id", "event", "actor", "from_state", "to_state", "transition_row", "reason_code", "note", "details_json"];
+  const rows = [...logs.events]
+    .sort((a, b) => a.seq - b.seq)
+    .map((e) =>
+      [
+        String(e.seq), e.at, e.run_id ? refs.get(e.run_id) ?? "" : "", e.run_id ?? "", e.type,
+        e.actor === "system" ? "system" : `${e.actor} (demo identity)`,
+        e.from_state ?? "", e.to_state ?? "", e.transition != null ? String(e.transition) : "", e.code ?? "", e.note ?? "",
+        e.details && Object.keys(e.details).length ? JSON.stringify(e.details, (_k, v) => (typeof v === "bigint" ? v.toString() : v)) : "",
+      ].map(csvCell),
+    );
+  return [header.join(","), ...rows.map((r) => r.join(","))].join("\r\n") + "\r\n";
+}
+
 export function info() {
   return runtime().info;
 }
