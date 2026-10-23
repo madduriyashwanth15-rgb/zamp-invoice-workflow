@@ -4,9 +4,9 @@ import Decimal from "decimal.js";
 import type { Finding, LineMatch, ReferenceData, StageStatus } from "@/domain/engine/types";
 import { paiseToRupees } from "@/domain/money";
 import { availableActions, sameInvoicePayable, vendorCanFix, type ActionOption } from "@/domain/runs/queries";
-import type { Approval, AuditEvent, CorrectionRequest, ExportRecord, Logs, RunRecord, StoreState, StoredDocument } from "@/domain/runs/types";
+import type { Approval, AuditEvent, CorrectionRequest, ExportRecord, Logs, RunRecord, RunTiming, StoreState, StoredDocument } from "@/domain/runs/types";
 import { nextToken } from "@/domain/runs/actions";
-import { formatDate, formatInr, formatTime } from "@/lib/format";
+import { formatDate, formatInr, formatSeconds, formatTime } from "@/lib/format";
 import { CODE_TEXT, STATE_TEXT, type Tone } from "@/lib/reason-text";
 import { sortTiers, tierOf, type IssueTier } from "@/lib/issue-tier";
 import { readerLabel } from "@/lib/reader-label";
@@ -133,6 +133,8 @@ export interface RunDetail extends RunSummary {
   subject: string | null;
   reply_token: string | null;
   extracted_by: RunRecord["extracted_by"];
+  /** Measured step durations of the last processing (gap 16); null when not recorded. */
+  timing: RunTiming | null;
   extraction: RunRecord["extraction"];
   document: (Omit<StoredDocument, "text_layer"> & { text_chars: number }) | null;
   stages: StageView[];
@@ -309,9 +311,11 @@ function stagesOf(run: RunRecord, named: (t: string) => string = (t) => t): Stag
   };
   if (run.extracted_by) {
     const mock = reader === "The MOCK reading";
+    // Gap 16: the measured reading time, on a real reader only (a MOCK lookup's time means nothing).
+    const took = !mock && run.timing ? `, ${formatSeconds(run.timing.read_ms)}` : "";
     read.notes.push(plain(mock ? "Values from the MOCK answer key for this test file; no AI was called"
-      : run.extracted_by.cached ? "Answer reused from the cache (same file, prompt and model)"
-      : `${run.extracted_by.attempts} call${run.extracted_by.attempts === 1 ? "" : "s"} to the model`));
+      : run.extracted_by.cached ? `Answer reused from the cache (same file, prompt and model)${took}`
+      : `${run.extracted_by.attempts} call${run.extracted_by.attempts === 1 ? "" : "s"} to the model${took}`));
     for (const r of run.extracted_by.retries ?? []) read.notes.push(plain(`Retried: ${r}`));
   }
   if (run.extraction) read.notes.push(plain(`Read as ${run.extraction.doc_type.replace(/_/g, " ")}, titled "${run.extraction.document_title ?? "no title"}"`));
@@ -432,7 +436,7 @@ export function detail(run: RunRecord, state: Pick<StoreState, "runs" | "documen
   return {
     ...summarize(run, ref, state),
     failure: run.failure, sender_email: run.sender_email, uploader: run.uploader_display_name, subject: run.subject, reply_token: run.reply_token,
-    extracted_by: run.extracted_by, extraction: run.extraction,
+    extracted_by: run.extracted_by, timing: run.timing ?? null, extraction: run.extraction,
     document: doc ? { run_id: doc.run_id, filename: doc.filename, content_type: doc.content_type, size_bytes: doc.size_bytes, sha256: doc.sha256, has_text_layer: doc.has_text_layer, body_text: doc.body_text, text_chars: doc.text_layer.length } : null,
     stages: [...stagesOf(run, refsFor(state.runs as Map<string, RunRecord>)), ...(review ? [review] : [])],
     blocking: run.blocking_codes.map(codeView),

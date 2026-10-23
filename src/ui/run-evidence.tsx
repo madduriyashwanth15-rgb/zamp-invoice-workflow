@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { ArrowUpRight, Check, ChevronDown, CircleAlert, ExternalLink, FileText, Minus, ScanLine, ShieldCheck, User, X } from "lucide-react";
 import type { FindingView, PoTableView, RunDetail, StageView } from "@/server/views";
-import { formatDate, formatInr, formatTime } from "@/lib/format";
+import { formatDate, formatInr, formatSeconds, formatTime } from "@/lib/format";
 import { CODE_TEXT, STATE_TEXT } from "@/lib/reason-text";
 import { readerLabel } from "@/lib/reader-label";
 import { SHORT_STATE, StateChip } from "./chips";
@@ -238,6 +238,20 @@ const EXPECTED = [
   "Reviewer decision",
 ];
 
+/** Gap 16: the durations measured on this run, as recorded. A MOCK lookup's time is not shown: it means nothing. */
+function TimingLine({ timing, reader, cached }: { timing: NonNullable<RunDetail["timing"]>; reader: "ai" | "mock" | null; cached: boolean }) {
+  const parts: string[] = [];
+  if (reader === "ai") parts.push(`${cached ? "reading reused from the cache" : "read by the AI"} in ${formatSeconds(timing.read_ms)}`);
+  parts.push(`checked by code in ${formatSeconds(timing.check_ms)}`);
+  if (timing.propose_ms > 0) parts.push(`plus ${formatSeconds(timing.propose_ms)} for the ${reader === "ai" ? "AI" : "MOCK"} line-match proposal`);
+  const text = parts.join(", ");
+  return (
+    <span className="mt-1 block text-ink-3">
+      Measured on this invoice: <span className="num">{text}</span>.
+    </span>
+  );
+}
+
 export function Checks({ run }: { run: RunDetail }) {
   const expected = inFlight(run) ? EXPECTED : [];
   const reader = readerSource(run);
@@ -247,11 +261,14 @@ export function Checks({ run }: { run: RunDetail }) {
     <Panel
       title="Checks"
       description={
-        reader === "ai"
-          ? "Step 1 is the AI reading the document (pencilled, dashed). Every step after it is code that verifies what was read, then a person decides."
-          : reader === "mock"
-            ? "Step 1 is the MOCK reading (the answer key, test files only). Every step after it is code, then a person decides."
-            : "Each check is code; a person makes the final decision."
+        <>
+          {reader === "ai"
+            ? "Step 1 is the AI reading the document (pencilled, dashed). Every step after it is code that verifies what was read, then a person decides."
+            : reader === "mock"
+              ? "Step 1 is the MOCK reading (the answer key, test files only). Every step after it is code, then a person decides."
+              : "Each check is code; a person makes the final decision."}
+          {!inFlight(run) && run.timing && <TimingLine timing={run.timing} reader={reader} cached={Boolean(run.extracted_by?.cached)} />}
+        </>
       }
       actions={
         !inFlight(run) && (

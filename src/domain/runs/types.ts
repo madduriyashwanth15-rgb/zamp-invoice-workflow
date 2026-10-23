@@ -27,6 +27,12 @@ export interface RunRecord {
   extraction: Extraction | null;
   /** Which extractor and prompt version read the document, after how many provider calls (0 = cache hit). */
   extracted_by: { extractor: string; attempts: number; cached: boolean; retries?: string[] } | null;
+  /**
+   * How long the last processing took, measured around each step (review gap 16): reading the document, the code
+   * checks, and inside the checks any AI line-match proposal (M2), which is counted apart. Absent on runs processed
+   * before 23 Oct and on runs whose reading failed.
+   */
+  timing?: RunTiming | null;
   engine: EngineResult | null;
   vendor_id: string | null;
   chain_key: string | null;
@@ -53,6 +59,12 @@ export interface RunRecord {
   token_seed?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface RunTiming {
+  read_ms: number;
+  check_ms: number;
+  propose_ms: number;
 }
 
 export interface Approval {

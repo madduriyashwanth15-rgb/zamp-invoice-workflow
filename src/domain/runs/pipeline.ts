@@ -40,7 +40,26 @@ export interface PipelineDeps {
   newRef: (tx: StoreState) => string;
   extractor: Extractor;
   proposer: MappingProposer | null;
+  /** Milliseconds from any fixed point, for step timings only (defaults to performance.now). */
+  clock?: () => number;
 }
+
+/** The proposer, timed: each call's duration is added up so the checks' own time can be told apart (gap 16). */
+function timedProposer(p: MappingProposer, tick: () => number, add: (ms: number) => void): MappingProposer {
+  return {
+    label: p.label,
+    async propose(request) {
+      const from = tick();
+      try {
+        return await p.propose(request);
+      } finally {
+        add(tick() - from);
+      }
+    },
+  };
+}
+
+const tenthMs = (ms: number) => Math.max(0, Math.round(ms * 10) / 10);
 
 export interface IncomingDocument {
   source: "email" | "upload";
@@ -189,7 +208,10 @@ export async function processRun(deps: PipelineDeps, runId: string): Promise<Run
   });
   const bytes = await deps.store.documentBytes(runId);
   if (!bytes) throw new Error(`run ${runId}: original file missing`);
+  const tick = deps.clock ?? (() => globalThis.performance?.now() ?? Date.now());
+  const readFrom = tick();
   const attempt = await deps.extractor.extract({ filename: doc.filename, content_type: doc.content_type, bytes, text_layer: doc.text_layer, sha256: doc.sha256 });
+  const readMs = tick() - readFrom;
 
   if (attempt.status === "transport_error") {
     return deps.store.transaction((tx) => {
@@ -198,6 +220,7 @@ export async function processRun(deps: PipelineDeps, runId: string): Promise<Run
       run.failure = `PROCESSING_ERROR: ${attempt.error} (${attempt.attempts} attempts)`;
       run.extracted_by = { extractor: attempt.label, attempts: attempt.attempts, cached: false, retries: attempt.retries ?? [] };
       run.primary_reason = "PROCESSING_ERROR";
+      run.timing = null;
       transition(tx, run, 3, "FAILED", { actor: "system", at: deps.now(), code: "PROCESSING_ERROR", details: { attempts: attempt.attempts, extractor: attempt.label, error: attempt.error } });
       return run;
     });
@@ -211,6 +234,7 @@ export async function processRun(deps: PipelineDeps, runId: string): Promise<Run
       run.extracted_by = { extractor: attempt.label, attempts: attempt.attempts, cached: false, retries: attempt.retries ?? [] };
       run.primary_reason = "EXTRACTION_FAILED";
       run.engine = null;
+      run.timing = null;
       transition(tx, run, 2, "ON_HOLD", { actor: "system", at, code: "EXTRACTION_FAILED", details: { errors: attempt.errors, attempts: attempt.attempts, extractor: attempt.label } });
       pushEvent(tx, { run_id: runId, type: "DECIDED", actor: "system", at, details: { outcome: "ON_HOLD", blocking: ["EXTRACTION_FAILED"], errors: attempt.errors } });
       return run;
@@ -228,6 +252,9 @@ export async function processRun(deps: PipelineDeps, runId: string): Promise<Run
       run: s.runs.get(runId)!,
     }));
     let engine: EngineResult;
+    let proposeMs = 0;
+    const proposer = deps.proposer && timedProposer(deps.proposer, tick, (ms) => (proposeMs += ms));
+    const checkFrom = tick();
     try {
       engine = await evaluate({
       extraction: attempt.extraction,
@@ -236,7 +263,7 @@ export async function processRun(deps: PipelineDeps, runId: string): Promise<Run
         reply_token: snap.run.reply_token, text_layer: doc.text_layer, has_text_layer: doc.has_text_layer, g1_bypassed: snap.run.g1_bypassed,
         sender_authenticated: snap.run.sender_authenticated ?? null,
       },
-      reference: deps.reference, priorRuns: snap.prior, tokens: snap.tokens, today: deps.today(), proposer: deps.proposer,
+      reference: deps.reference, priorRuns: snap.prior, tokens: snap.tokens, today: deps.today(), proposer,
     });
     } catch (e) {
       // The evaluation itself could not finish (for example the AI line proposal was unreachable): row 3, retryable.
@@ -246,10 +273,12 @@ export async function processRun(deps: PipelineDeps, runId: string): Promise<Run
         if (run.state !== "PROCESSING") return run;
         run.failure = `PROCESSING_ERROR: ${message}`;
         run.primary_reason = "PROCESSING_ERROR";
+        run.timing = null;
         transition(tx, run, 3, "FAILED", { actor: "system", at: deps.now(), code: "PROCESSING_ERROR", details: { error: message } });
         return run;
       });
     }
+    const timing = { read_ms: tenthMs(readMs), check_ms: tenthMs(tick() - checkFrom - proposeMs), propose_ms: tenthMs(proposeMs) };
     const fp = fingerprint(snap.state, runId, engine);
     const committed = await deps.store.transaction((tx) => {
       const run = tx.runs.get(runId)!;
@@ -257,6 +286,7 @@ export async function processRun(deps: PipelineDeps, runId: string): Promise<Run
       if (fingerprint(tx, runId, engine) !== fp) return null;
       run.extraction = attempt.extraction;
       run.extracted_by = { extractor: attempt.label, attempts: attempt.attempts, cached: attempt.cached ?? false, retries: attempt.retries ?? [] };
+      run.timing = timing;
       applyDecision(tx, run, engine, deps.now());
       return run;
     });
@@ -338,6 +368,7 @@ export async function failStuckRuns(deps: PipelineDeps, olderThanMs: number): Pr
       if (run.state === "RECEIVED") transition(tx, run, 1, "PROCESSING", { actor: "system", at });
       run.failure = `PROCESSING_ERROR: processing stopped before a decision (no result after ${Math.round(olderThanMs / 60_000)} minutes); retry to read it again`;
       run.primary_reason = "PROCESSING_ERROR";
+      run.timing = null;
       transition(tx, run, 3, "FAILED", { actor: "system", at, code: "PROCESSING_ERROR", details: { reason: "interrupted", waited_ms: olderThanMs } });
       done.push(id);
     }

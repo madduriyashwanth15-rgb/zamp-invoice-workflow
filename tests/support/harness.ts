@@ -52,6 +52,9 @@ export function makeDeps(opts: HarnessOptions = {}): PipelineDeps {
     newRef: () => `T${String(n).padStart(4, "0")}`,
     extractor: opts.extractor ?? new AnswerKeyExtractor(reference, opts.mutate),
     proposer: opts.proposer === undefined ? new AnswerKeyProposer() : opts.proposer,
+    // Step timings (gap 16) on a stopped clock, so records stay deterministic like the ids and timestamps above;
+    // tests/timing.test.ts measures with the real clock and a scripted one.
+    clock: () => 0,
   };
 }
 

@@ -42,3 +42,9 @@ export function sumRupees(values: (string | null | undefined)[]): string {
   const a = neg ? -paise : paise;
   return `${neg ? "-" : ""}${a / 100n}.${(a % 100n).toString().padStart(2, "0")}`;
 }
+
+/** A measured duration (not money): 2400 -> "2.4 s", 23 -> "0.02 s", 3 -> "under 0.01 s". */
+export function formatSeconds(ms: number): string {
+  if (ms < 10) return "under 0.01 s";
+  return ms < 995 ? `${(ms / 1000).toFixed(2)} s` : `${(ms / 1000).toFixed(1)} s`;
+}
