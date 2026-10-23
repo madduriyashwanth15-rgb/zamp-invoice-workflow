@@ -2,17 +2,22 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ArrowUpRight, Download, Mail, RotateCcw, Send, TriangleAlert } from "lucide-react";
 import type { RuntimeInfo } from "@/server/runtime";
 import { api, errorText } from "./api";
 import { useIdentity } from "./identity";
+import { Button, Field, Notice, Panel, Skeleton, btn, cx, inputCls } from "./kit";
+import { useRuns } from "./runs-context";
+import { PageHeader } from "./shell";
 
 type Scenario = { test_id: string; title: string; file: string; sender: string; needs_token_of: string | null };
 
 export function DemoTools() {
   const { name } = useIdentity();
+  const runs = useRuns();
   const [list, setList] = useState<Scenario[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [result, setResult] = useState<Record<string, { ok: boolean; text: string; runId?: string }>>({});
+  const [result, setResult] = useState<Record<string, { ok: boolean; text: string; runId?: string; sending?: boolean }>>({});
   const [confirm, setConfirm] = useState("");
   const [forget, setForget] = useState(false);
   const [realReader, setRealReader] = useState(false);
@@ -20,6 +25,7 @@ export function DemoTools() {
   // Component state only: never stored in the browser, cleared after a successful reset.
   const [adminKey, setAdminKey] = useState("");
   const [resetMsg, setResetMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [resetting, setResetting] = useState(false);
   const [inbox, setInbox] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,143 +46,177 @@ export function DemoTools() {
   }, []);
 
   async function send(s: Scenario) {
-    setResult((r) => ({ ...r, [s.test_id]: { ok: true, text: "Sending" } }));
-    const res = await fetch("/api/demo/replay", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ test_id: s.test_id }) });
-    const body = await res.json().catch(() => ({ reason: `The server answered ${res.status}` }));
-    setResult((r) => ({
-      ...r,
-      [s.test_id]: res.ok ? { ok: true, text: body.repeats?.length ? "Already received" : "Received", runId: body.run_ids?.[0] } : { ok: false, text: body.reason },
-    }));
+    setResult((r) => ({ ...r, [s.test_id]: { ok: true, text: "Sending", sending: true } }));
+    try {
+      const res = await fetch("/api/demo/replay", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ test_id: s.test_id }) });
+      const body = await res.json().catch(() => ({ reason: `The server answered ${res.status}` }));
+      setResult((r) => ({
+        ...r,
+        [s.test_id]: res.ok ? { ok: true, text: body.repeats?.length ? "Already received" : "Received", runId: body.run_ids?.[0] } : { ok: false, text: body.reason },
+      }));
+      runs.refresh();
+    } catch (e) {
+      setResult((r) => ({ ...r, [s.test_id]: { ok: false, text: errorText(e) } }));
+    }
   }
 
   const showForget = realReader && resetMode !== "disabled";
 
   async function reset() {
-    const res = await fetch("/api/demo/reset", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(resetMode === "key" ? { "x-demo-admin-key": adminKey } : {}) },
-      body: JSON.stringify({ actor: name, confirm, forgetReadings: forget }),
-    });
-    const body = await res.json().catch(() => ({}));
-    const forgotten = typeof body.forgotten === "number" ? ` ${body.forgotten} saved reading${body.forgotten === 1 ? " was" : "s were"} forgotten: the next run of each file calls the AI again.` : "";
-    setResetMsg(res.ok ? { ok: true, text: `All invoices and history were removed.${forgotten}` } : { ok: false, text: body.reason ?? `The server answered ${res.status}` });
-    if (res.ok) {
-      setResult({});
-      setConfirm("");
-      setForget(false);
-      setAdminKey("");
+    setResetting(true);
+    try {
+      const res = await fetch("/api/demo/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(resetMode === "key" ? { "x-demo-admin-key": adminKey } : {}) },
+        body: JSON.stringify({ actor: name, confirm, forgetReadings: forget }),
+      });
+      const body = await res.json().catch(() => ({}));
+      const forgotten =
+        typeof body.forgotten === "number"
+          ? ` ${body.forgotten} saved reading${body.forgotten === 1 ? " was" : "s were"} forgotten: the next run of each file calls the AI again.`
+          : "";
+      setResetMsg(res.ok ? { ok: true, text: `All invoices and history were removed.${forgotten}` } : { ok: false, text: body.reason ?? `The server answered ${res.status}` });
+      if (res.ok) {
+        setResult({});
+        setConfirm("");
+        setForget(false);
+        setAdminKey("");
+        runs.refresh();
+      }
+    } catch (e) {
+      setResetMsg({ ok: false, text: errorText(e) });
+    } finally {
+      setResetting(false);
     }
   }
 
   return (
-    <div className="space-y-8">
-      <section aria-labelledby="replay-h" className="rounded-md border border-rule bg-surface">
-        <div className="border-b border-rule px-4 py-3">
-          <h1 id="replay-h" className="text-2xl font-bold tracking-tight">Send a recorded vendor email</h1>
-          <p className="mt-1 max-w-3xl text-sm text-ink-2">
-            Each button replays one recorded test email exactly as a vendor sent it (sender, subject, body and attachment).
-            The email provider is simulated; the intake, reading, checks and decision are the real ones. Replies to a
-            correction carry the reference this app actually issued.
-          </p>
-          <p className="mt-2 max-w-3xl text-sm text-ink-2">
-            To try real email instead, download a sample invoice and email it as an attachment
-            {inbox ? (
-              <>
-                {" "}to <span className="font-semibold text-ink">{inbox}</span>
-              </>
-            ) : (
-              " to the AP inbox"
-            )}
-            . From an address that is not registered for that vendor it is held as an unverified sender, which is the
-            intended check.
-          </p>
-        </div>
-        {loadError && <p className="px-4 py-6 text-bad-fg">{loadError}</p>}
-        {!list && !loadError && <p className="px-4 py-6 text-ink-2">Loading the recorded emails</p>}
+    <div className="space-y-5">
+      <PageHeader
+        crumbs={[{ label: "Setup" }, { label: "Demo inbox" }]}
+        title="Demo inbox"
+        meta="Replays the recorded test emails exactly as a vendor sent them: sender, subject, body and attachment. The email provider is simulated; the intake, reading, checks and decision are the real ones, and replies to a correction carry the reference this app actually issued."
+      />
+
+      <Notice tone="info" title="Try a real email instead">
+        Download a sample invoice and email it as an attachment
+        {inbox ? (
+          <>
+            {" "}
+            to <span className="font-semibold">{inbox}</span>
+          </>
+        ) : (
+          " to the AP inbox"
+        )}
+        . From an address that is not registered for that vendor it is held as an unverified sender, which is the intended check.
+      </Notice>
+
+      <Panel
+        title="Recorded vendor emails"
+        description="S1 to S14 are the scenario set; X1 to X3 are extra edge cases. A reply to a correction needs that correction requested first."
+        flush
+      >
+        {loadError && (
+          <div className="p-4">
+            <Notice tone="error" title="The recorded emails did not load">
+              {loadError}
+            </Notice>
+          </div>
+        )}
+        {!list && !loadError && (
+          <div aria-busy aria-label="Loading the recorded emails" className="space-y-3 p-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="w-2/3" />
+            ))}
+          </div>
+        )}
         {list && (
           <ul className="divide-y divide-rule">
             {list.map((s) => {
               const r = result[s.test_id];
               return (
-                <li key={s.test_id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold">
-                      <span className="num mr-2 text-ink-3">{s.test_id}</span>
-                      {s.title}
-                    </p>
-                    <p className="text-xs text-ink-3">
-                      {s.file}, from {s.sender === "unregistered" ? "an unregistered" : "a registered"} address{s.needs_token_of ? `, replies to the ${s.needs_token_of} correction request` : ""}
+                <li key={s.test_id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5">
+                  <span className="w-10 shrink-0 font-mono text-[12px] font-semibold text-ink-2">{s.test_id}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[13px] font-semibold text-ink">{s.title}</p>
+                    <p className="flex flex-wrap items-center gap-x-2 text-[12px] text-ink-3">
+                      <span className="break-all">{s.file}</span>
+                      <span className={cx("inline-flex items-center gap-1", s.sender === "unregistered" && "font-medium text-bad-fg")}>
+                        <Mail aria-hidden size={12} />
+                        {s.sender === "unregistered" ? "unregistered sender" : "registered sender"}
+                      </span>
+                      {s.needs_token_of && <span>replies to the {s.needs_token_of} correction request</span>}
                     </p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="ml-14 flex items-center gap-2 sm:ml-0">
                     {r && (
-                      <span role="status" className={`text-sm ${r.ok ? "text-ok-fg" : "text-bad-fg"}`}>
+                      <span role="status" className={cx("text-[12px] font-medium", r.sending ? "text-ink-2" : r.ok ? "text-ok-fg" : "text-bad-fg")}>
                         {r.text}
                         {r.runId && (
-                          <>
-                            {" "}
-                            <Link href={`/runs/${r.runId}`} className="text-carbon-deep underline">
-                              open
-                            </Link>
-                          </>
+                          <Link href={`/runs/${r.runId}`} className="ml-1.5 inline-flex items-center gap-0.5 font-semibold text-carbon-deep hover:underline">
+                            Open
+                            <ArrowUpRight aria-hidden size={12} />
+                          </Link>
                         )}
                       </span>
                     )}
-                    <a
-                      href={`/api/demo/file/${encodeURIComponent(s.test_id)}`}
-                      download
-                      className="text-sm font-semibold text-carbon-deep underline underline-offset-2"
-                    >
-                      Download PDF<span className="sr-only"> for {s.test_id}</span>
+                    <a href={`/api/demo/file/${encodeURIComponent(s.test_id)}`} download className={btn("ghost", "sm")}>
+                      <Download aria-hidden size={14} />
+                      PDF<span className="sr-only"> for {s.test_id}</span>
                     </a>
-                    <button type="button" onClick={() => send(s)} className="rounded-md border border-rule-strong px-3 py-1.5 text-sm font-semibold hover:bg-paper">
-                      Send
-                    </button>
+                    <Button size="sm" icon={Send} onClick={() => send(s)} disabled={r?.sending}>
+                      Send<span className="sr-only"> {s.test_id}</span>
+                    </Button>
                   </div>
                 </li>
               );
             })}
           </ul>
         )}
-      </section>
+      </Panel>
 
-      <section aria-labelledby="reset-h" className="rounded-md border border-bad-edge bg-surface p-4">
-        <h2 id="reset-h" className="text-lg font-bold">Start again</h2>
-        <p className="mt-1 text-sm text-ink-2">
-          Removes every invoice, approval, export and history entry.
-          {showForget && " Saved readings are kept unless you tick the box, so the same files read instantly."}
-        </p>
-        {resetMode === "disabled" && <p className="mt-3 text-sm font-semibold">Reset is turned off on this deployment.</p>}
-        {showForget && (
-          <label className="mt-3 flex items-start gap-2 text-sm">
-            <input type="checkbox" className="mt-0.5 h-4 w-4" checked={forget} onChange={(e) => setForget(e.target.checked)} />
-            <span>
-              Also forget saved readings. The next run of each file is read by the AI again (uses AI quota, takes a few seconds per file).
-            </span>
-          </label>
-        )}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          {resetMode === "key" && (
-            <>
-              <label htmlFor="admin-key" className="text-sm">
-                Admin key
-              </label>
-              <input id="admin-key" type="password" autoComplete="off" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} className="w-44 rounded-md border border-rule-strong px-2 py-1 text-sm" />
-            </>
+      <section aria-labelledby="reset-h" className="rounded-lg border border-bad-edge bg-surface">
+        <div className="flex items-start gap-2 border-b border-bad-edge/60 px-4 py-3">
+          <TriangleAlert aria-hidden size={16} className="mt-0.5 shrink-0 text-bad-fg" />
+          <div>
+            <h2 id="reset-h" className="text-[15px] font-semibold text-ink">
+              Start again
+            </h2>
+            <p className="mt-0.5 text-[13px] text-ink-2">
+              Removes every invoice, approval, export and history entry. This cannot be undone.
+              {showForget && " Saved readings are kept unless you tick the box, so the same files read instantly."}
+            </p>
+          </div>
+        </div>
+        <div className="space-y-3 px-4 py-3">
+          {resetMode === "disabled" && <p className="text-[13px] font-semibold">Reset is turned off on this deployment.</p>}
+          {showForget && (
+            <label className="flex items-start gap-2 text-[13px]">
+              <input type="checkbox" className="mt-0.5 h-4 w-4 accent-bad-fg" checked={forget} onChange={(e) => setForget(e.target.checked)} />
+              <span>Also forget saved readings. The next run of each file is read by the AI again (uses AI quota, takes a few seconds per file).</span>
+            </label>
           )}
           {resetMode !== "disabled" && (
-            <>
-              <label htmlFor="confirm" className="text-sm">
-                Type RESET to confirm
-              </label>
-              <input id="confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="w-28 rounded-md border border-rule-strong px-2 py-1 text-sm" />
-            </>
+            <div className="flex flex-wrap items-end gap-3">
+              {resetMode === "key" && (
+                <Field label="Admin key" htmlFor="admin-key" className="w-48">
+                  <input id="admin-key" type="password" autoComplete="off" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} className={inputCls} />
+                </Field>
+              )}
+              <Field label="Type RESET to confirm" htmlFor="confirm" className="w-40">
+                <input id="confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inputCls} autoComplete="off" />
+              </Field>
+              <Button variant="danger-solid" icon={RotateCcw} disabled={resetting || confirm !== "RESET" || (resetMode === "key" && !adminKey)} busy={resetting} onClick={reset}>
+                {resetting ? "Removing" : "Remove everything"}
+              </Button>
+            </div>
           )}
-          <button type="button" disabled={resetMode === "disabled" || confirm !== "RESET" || (resetMode === "key" && !adminKey)} onClick={reset} className="rounded-md bg-bad-fg px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-40">
-            Remove everything
-          </button>
+          {resetMsg && (
+            <Notice tone={resetMsg.ok ? "success" : "error"} live>
+              {resetMsg.text}
+            </Notice>
+          )}
         </div>
-        {resetMsg && <p className={`mt-2 text-sm ${resetMsg.ok ? "text-ok-fg" : "text-bad-fg"}`}>{resetMsg.text}</p>}
       </section>
     </div>
   );

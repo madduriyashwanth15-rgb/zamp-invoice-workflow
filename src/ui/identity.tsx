@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useId, useState, type ReactNode } from "react";
+import { UserRound } from "lucide-react";
 
 // U1: the reviewer picks a display name before acting. It is recorded on every action but never verified.
 
@@ -35,52 +36,53 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
 
 export const useIdentity = () => useContext(Ctx);
 
-export function IdentityPicker() {
+/** Who is acting, chosen in the side navigation. On the dark spine by default. */
+export function IdentityPicker({ onLight }: { onLight?: boolean }) {
   const { name, setName } = useIdentity();
   const id = useId();
   const [editing, setEditing] = useState(false);
   const showInput = editing || (name !== "" && !PRESETS.includes(name));
+  const field = onLight ? "border-rule-strong bg-surface text-ink" : "border-spine-2 bg-spine-2 text-white focus:border-spine-ink-2";
   return (
-    <div className="flex flex-col items-end gap-0.5">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <label htmlFor={id} className="text-sm text-ink-2">
-          Acting as
-        </label>
-        <select
-          id={id}
-          value={showInput ? "__custom" : name}
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v === "__custom") {
-              setEditing(true);
-              setName("");
-            } else {
-              setEditing(false);
-              setName(v);
-            }
-          }}
-          className={`rounded-md border px-2 py-1 text-sm ${name ? "border-rule-strong bg-surface text-ink" : "border-hold-edge bg-hold-bg text-hold-fg"}`}
-        >
-          <option value="">Choose a name</option>
-          {PRESETS.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-          <option value="__custom">Another name</option>
-        </select>
-        {showInput && (
-          <input
-            aria-label="Your display name"
-            autoFocus={editing}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-40 rounded-md border border-rule-strong bg-surface px-2 py-1 text-sm"
-            placeholder="Your display name"
-          />
-        )}
-      </div>
-      <span className="text-xs text-ink-3">{IDENTITY_LABEL}</span>
+    <div>
+      <label htmlFor={id} className={`flex items-center gap-1.5 text-[12px] font-semibold ${onLight ? "text-ink-2" : "text-spine-ink"}`}>
+        <UserRound aria-hidden size={13} />
+        Acting as
+      </label>
+      <select
+        id={id}
+        value={showInput ? "__custom" : name}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "__custom") {
+            setEditing(true);
+            setName("");
+          } else {
+            setEditing(false);
+            setName(v);
+          }
+        }}
+        className={`mt-1 block w-full rounded-md border px-2 py-1.5 text-[13px] ${name ? field : "border-hold-edge bg-hold-bg font-semibold text-hold-fg"}`}
+      >
+        <option value="">Choose a name</option>
+        {PRESETS.map((p) => (
+          <option key={p} value={p}>
+            {p}
+          </option>
+        ))}
+        <option value="__custom">Another name</option>
+      </select>
+      {showInput && (
+        <input
+          aria-label="Your display name"
+          autoFocus={editing}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className={`mt-1.5 block w-full rounded-md border px-2 py-1.5 text-[13px] ${field}`}
+          placeholder="Your display name"
+        />
+      )}
+      <p className={`mt-1 text-[11px] ${onLight ? "text-ink-3" : "text-spine-ink-2"}`}>{IDENTITY_LABEL}</p>
     </div>
   );
 }

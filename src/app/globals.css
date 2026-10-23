@@ -1,47 +1,65 @@
 @import "tailwindcss";
 
 /*
-  Design tokens. An accounts-payable desk: ledger-grey paper, blue-black ballpoint ink, carbon-copy blue for
-  actions, and the colours of multi-part invoice books for status (canary = needs attention, pink = refused,
-  blue copy = waiting on someone else, ledger green = passed). Values the AI read are "pencilled in" (graphite,
-  dashed) until code has checked them in ink.
+  Design tokens. An accounts-payable desk, kept close to the paperwork it replaces: a dark ledger spine for
+  navigation, white sheets on a grey desk, blue-black ink, carbon-copy blue for actions, and the colours of
+  multi-part invoice books for status (canary = needs a decision, pink = refused or a fraud signal, blue copy =
+  waiting on someone else, ledger green = passed). Values an AI read are "pencilled in" (graphite, dashed) until
+  code has checked them in ink. Light theme only: the desk is a daytime office tool, and one theme fully tested
+  beats two half-tested.
 */
 :root {
-  --paper: #f2f4f1;
+  /* Surfaces */
+  --paper: #f3f4f1;
   --surface: #ffffff;
-  --ink: #1d2433;
-  --ink-2: #4b5567;
-  --ink-3: #6c7586;
-  --rule: #d8ddd5;
-  --rule-strong: #b9c0b5;
-  --carbon: #2c44a6;
-  --carbon-deep: #1f3283;
-  --carbon-wash: #e8ecfa;
-  --graphite: #868c96;
+  --surface-2: #f8f9f7;
+  --spine: #121722;
+  --spine-2: #1c2230;
+  --spine-ink: #c5ccd8;
+  --spine-ink-2: #8a93a3;
 
-  --ok-bg: #e1f0e3;
-  --ok-fg: #1c5c33;
-  --ok-edge: #9ccaa6;
-  --hold-bg: #fff1b8;
-  --hold-fg: #654700;
-  --hold-edge: #dfbd36;
-  --wait-bg: #e2e9fa;
-  --wait-fg: #29448f;
-  --wait-edge: #a9bceb;
+  /* Ink and rules */
+  --ink: #161c28;
+  --ink-2: #465063;
+  --ink-3: #657083;
+  --rule: #e0e3dd;
+  --rule-strong: #c3c8bf;
+
+  /* Action */
+  --carbon: #2a46b0;
+  --carbon-deep: #1e3591;
+  --carbon-wash: #e9edfb;
+  --graphite: #7c8391;
+
+  /* Status: invoice-book colours */
+  --ok-bg: #e3f1e6;
+  --ok-fg: #1a5c33;
+  --ok-edge: #a3cdad;
+  --hold-bg: #fff3c2;
+  --hold-fg: #644600;
+  --hold-edge: #dfbd3f;
+  --wait-bg: #e4ebfa;
+  --wait-fg: #28438e;
+  --wait-edge: #aabded;
   --approved-bg: #184d2c;
   --approved-fg: #f1f8f2;
-  --bad-bg: #fbe2e6;
-  --bad-fg: #8f2134;
-  --bad-edge: #e6a0ad;
-  --muted-bg: #eceef0;
-  --muted-fg: #535b6a;
-  --muted-edge: #c9ced6;
+  --bad-bg: #fce5e9;
+  --bad-fg: #8f1f33;
+  --bad-edge: #e7a2ae;
+  --muted-bg: #edeef0;
+  --muted-fg: #525a69;
+  --muted-edge: #cbd0d7;
   --stamp-ok: #3d8a58;
 }
 
 @theme inline {
   --color-paper: var(--paper);
   --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-spine: var(--spine);
+  --color-spine-2: var(--spine-2);
+  --color-spine-ink: var(--spine-ink);
+  --color-spine-ink-2: var(--spine-ink-2);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-3: var(--ink-3);
@@ -69,7 +87,8 @@
   --color-muted-fg: var(--muted-fg);
   --color-muted-edge: var(--muted-edge);
   --color-stamp-ok: var(--stamp-ok);
-  --font-sans: "Atkinson Hyperlegible Next Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
 html {
@@ -79,11 +98,11 @@ html {
 
 body {
   font-family: var(--font-sans);
-  font-size: 16px;
-  line-height: 1.5;
-  font-feature-settings: "tnum" 0;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
+/* Plex digits are already one width; this keeps it explicit wherever numbers line up in columns. */
 .num {
   font-variant-numeric: tabular-nums;
 }
@@ -91,7 +110,46 @@ body {
 :focus-visible {
   outline: 2px solid var(--carbon);
   outline-offset: 2px;
-  border-radius: 3px;
+  border-radius: 4px;
+}
+/* On the dark spine the action blue is too dark to see: a pale ring instead (3:1 or more against the spine). */
+.bg-spine :focus-visible,
+dialog.drawer :focus-visible {
+  outline-color: #a9b9f6;
+}
+
+/* Native modal dialogs (focus is held inside and Escape closes them; the page behind is inert). */
+dialog.sheet {
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 24px 60px -12px rgb(18 23 34 / 0.35);
+  max-height: calc(100dvh - 2rem);
+  width: min(36rem, calc(100vw - 2rem));
+}
+dialog.sheet.wide {
+  width: min(48rem, calc(100vw - 2rem));
+}
+dialog.sheet::backdrop {
+  background: rgb(18 23 34 / 0.45);
+}
+dialog.drawer {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  height: 100dvh;
+  max-height: 100dvh;
+  width: min(18rem, 85vw);
+  background: var(--spine);
+}
+dialog.drawer::backdrop {
+  background: rgb(18 23 34 / 0.5);
+}
+body:has(dialog[open]) {
+  overflow: hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -115,6 +173,17 @@ body {
 }
 .slip-running {
   animation: slip-running 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--muted-bg) 0px, var(--surface-2) 80px, var(--muted-bg) 160px);
+  background-size: 400px 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 4px;
 }
 
 .reading-bar {

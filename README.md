@@ -26,7 +26,7 @@ email / upload ─▶ 0 intake ─▶ 1 read (AI) ─▶ 2-9 checks (code) ─�
   confirms the link. Without email sending configured, the reviewer copies the text and marks it sent manually.
 
 Live: https://zamp-invoice-workflow.vercel.app (Vercel, functions in Singapore next to the Neon database). Email
-invoices to the AP inbox shown on the Demo emails page; sample invoices can be downloaded there.
+invoices to the AP inbox shown on the Demo inbox page; sample invoices can be downloaded there.
 
 ## Run it (Windows PowerShell)
 
@@ -38,9 +38,9 @@ npm run dev                    # http://localhost:3000
 
 Without `DATABASE_URL` records live in memory (cleared on restart). Without `GEMINI_API_KEY` and `GEMINI_MODEL` the
 **MOCK extractor** is used: it does not read documents, it returns the answer key for the 18 test files by name. The
-header of every page says which of these is active.
+foot of the side menu says which of these is active.
 
-To try it: open **Demo emails** and send the recorded emails in order (S3's correction must be requested before S4),
+To try it: open **Demo inbox** and send the recorded emails in order (S3's correction must be requested before S4),
 or upload any PDF from `zamp-ps1-test-data-v2.1/test-data/invoices`.
 
 Settings (all optional; `.env.example` lists them):
@@ -88,7 +88,7 @@ matrix pass rule; it must also agree with the independent oracle (`oracle_result
 | AI | `src/server/extractor` | Versioned prompts, schema validation, retries with a backup model and a time budget, cache by file hash + prompt + model |
 | Intake | `src/server/email-intake.ts`, `src/app/api/inbound/resend` | One run per attachment; repeats ignored; fetch failures recorded |
 | Outgoing email | `src/server/correction-email.ts` | Check, send (idempotency key), then record; a failed send changes nothing |
-| App | `src/app`, `src/ui` | Next.js; dashboard, run view with every stage, demo tools, rules page |
+| App | `src/app`, `src/ui` | Next.js. The desk (what needs a decision, what is safe to approve, what is ready to export, with counts and sums from the records), the review screen (each hold with its risk, figures and safe next step; the invoice against its PO; every check; the document; the history; every action in a dialog that says what it does), the rules page and the demo inbox. Icons: lucide-react; font: IBM Plex Sans |
 
 ## Assumptions and limitations
 
@@ -124,7 +124,7 @@ matrix pass rule; it must also agree with the independent oracle (`oracle_result
   and the reviewer can copy the text and mark it sent manually.
 - Free-tier AI quotas are small (see Model choice). Readings are cached by file, prompt and model and survive a demo
   reset, so replaying the same files costs no calls. To show a fresh AI reading, tick "Also forget saved readings"
-  when resetting on the Demo emails page.
+  when resetting on the Demo inbox page.
 - The `/demo` page simulates the email provider by replaying recorded test emails; intake and checks are the real ones.
 - On a deployment with a database, "Start again" needs the `DEMO_ADMIN_KEY` admin key and is turned off without it.
 

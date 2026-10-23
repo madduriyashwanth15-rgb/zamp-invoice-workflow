@@ -8,6 +8,7 @@ import type { Approval, AuditEvent, CorrectionRequest, ExportRecord, Logs, RunRe
 import { nextToken } from "@/domain/runs/actions";
 import { formatDate, formatInr, formatTime } from "@/lib/format";
 import { CODE_TEXT, STATE_TEXT, type Tone } from "@/lib/reason-text";
+import { sortTiers, tierOf, type IssueTier } from "@/lib/issue-tier";
 import { holdNoteOf, issuesOf, readerName, recommendedAction, unitInr, vendorReasons, type ExplainContext, type IssueView, type Recommended } from "./explain";
 
 // JSON view models for the UI (no bigint, no internal objects). Presentation only: every value comes from the run.
@@ -53,6 +54,8 @@ export interface RunSummary {
   slip: SlipMark[];
   /** A cleared invoice that looks like a repeat of a payable one: not approvable by a routine (or batch) approval. */
   approve_blocked: boolean;
+  /** The kinds of risk among its holds, most serious first (presentation only; empty when nothing holds it). */
+  tiers: IssueTier[];
 }
 
 /** One step of the routing slip in brief. Statuses come from the run's recorded stages; nothing is inferred. */
@@ -187,7 +190,20 @@ export function summarize(run: RunRecord, ref: ReferenceData, state?: Pick<Store
     version: run.version, created_at: run.created_at, updated_at: run.updated_at, filename: run.filename,
     slip: slipOf(run),
     approve_blocked: Boolean(state && run.state === "CLEARED" && sameInvoicePayable(run, state)),
+    tiers: holdTiers(run),
   };
+}
+
+/** Tiers of the holds still open: blocking findings (with their evidence, for an unread bank account) and run-level holds. */
+function holdTiers(run: RunRecord): IssueTier[] {
+  if (run.state !== "ON_HOLD" && run.state !== "AWAITING_VENDOR" && run.state !== "FAILED") return [];
+  const findings = run.engine?.blocking ?? [];
+  const covered = new Set(findings.map((f) => f.code));
+  return sortTiers([
+    ...findings.map((f) => tierOf(f.code, f.evidence.field)),
+    ...run.blocking_codes.filter((c) => !covered.has(c)).map((c) => tierOf(c)),
+    ...(run.state === "FAILED" && run.primary_reason ? [tierOf(run.primary_reason)] : []),
+  ]);
 }
 
 const SLIP_STAGES = ["classify", "document", "vendor", "duplicates", "po", "lines", "compare", "decide"] as const;

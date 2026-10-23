@@ -5,6 +5,7 @@ import { vendorFixable, type ActionOption, type ReviewAction } from "@/domain/ru
 import type { AuditEvent, RunRecord } from "@/domain/runs/types";
 import { formatDate, formatInr } from "@/lib/format";
 import { CODE_TEXT, STATE_TEXT } from "@/lib/reason-text";
+import { tierOf, type IssueTier } from "@/lib/issue-tier";
 
 // Plain-language explanations of a run's holds (audit U01, U03-U05). Presentation only: every sentence is built
 // from the engine's recorded evidence and the reference data; nothing here decides anything or changes state.
@@ -23,6 +24,10 @@ export interface IssueView {
   line_no: number | null;
   /** A corrected invoice from the vendor can fix it. */
   vendor_fixable: boolean;
+  /** What kind of risk it is (presentation only; never changes a decision). */
+  tier: IssueTier | null;
+  /** The exact money or quantity at stake, when the evidence gives it exactly ("₹200.00 above the PO price"). */
+  impact: string | null;
 }
 
 export interface Recommended {
@@ -271,6 +276,62 @@ function explainFinding(f: Finding, x: Facts): string {
   }
 }
 
+/**
+ * The figure at stake, from the recorded evidence only, or null when it is not exact. Amounts on PO checks are
+ * before GST, as the checks compare them.
+ */
+function impactOf(f: Finding, x: Facts): string | null {
+  const e = f.evidence;
+  const m = x.match(f.line_no);
+  const pos = (d: Decimal) => (d.gt(0) ? d : null);
+  try {
+    switch (f.code) {
+      case "PRICE_OVER_TOLERANCE": {
+        if (!(m?.base_qty && m.po_unit_price && (e.basis === "exclusive" || e.basis === "none"))) return null;
+        const extra = pos(new Decimal(m.amount).minus(new Decimal(m.base_qty).mul(m.po_unit_price)).toDecimalPlaces(2, Decimal.ROUND_HALF_UP));
+        return extra ? `${inr(extra.toFixed(2))} above the PO price, before GST` : null;
+      }
+      case "QTY_EXCEEDS_PO": {
+        if (e.invoiced == null || e.ordered == null) return null;
+        const over = pos(new Decimal(String(e.invoiced)).plus(String(e.already_billed ?? 0)).minus(String(e.ordered)));
+        return over ? `${num(over)} ${x.poUom(f.line_no, e.po_line) ?? "units"} more than ordered` : null;
+      }
+      case "PO_AMOUNT_EXCEEDED": {
+        if (e.po_remaining != null && e.amount != null) {
+          const over = pos(new Decimal(String(e.amount)).minus(String(e.po_remaining)));
+          return over ? `${inr(over.toFixed(2))} more than remains on the PO, before GST` : null;
+        }
+        if (e.invoiced_pretax == null || e.cap == null) return null;
+        const over = pos(new Decimal(String(e.invoiced_pretax)).plus(String(e.already_billed ?? 0)).minus(String(e.cap)));
+        return over ? `${inr(over.toFixed(2))} over the PO limit, before GST` : null;
+      }
+      case "UNAPPROVED_CHARGE": {
+        if (e.amount == null) return null;
+        if (e.po_amount == null) return `${inr(e.amount)} not on the PO, before GST`;
+        const over = pos(new Decimal(String(e.amount)).plus(String(e.already_billed ?? 0)).minus(String(e.po_amount)));
+        return over ? `${inr(over.toFixed(2))} over the approved charge, before GST` : null;
+      }
+      case "ARITHMETIC_MISMATCH": {
+        if (e.computed == null || e.printed == null) return null;
+        const diff = pos(new Decimal(String(e.computed)).minus(String(e.printed)).abs());
+        return diff ? `Off by ${inr(diff.toFixed(2))}` : null;
+      }
+      case "BANK_DETAILS_CHANGED":
+        return e.printed_last4 && e.master_last4 ? `Pays an account ending ${e.printed_last4}, not ${e.master_last4}` : null;
+      case "APPROVAL_LIMIT_EXCEEDED": {
+        if (e.total == null || e.limit == null) return null;
+        const over = pos(new Decimal(String(e.total)).minus(String(e.limit)));
+        return over ? `${inr(over.toFixed(2))} above the approval limit` : null;
+      }
+      default:
+        return null;
+    }
+  } catch {
+    // Evidence that is not a number (an older record): no figure rather than a wrong one.
+    return null;
+  }
+}
+
 /** Vendor sentence for one finding, or null when it is not theirs to fix (or a paired finding already says it). */
 function vendorSentence(f: Finding, x: Facts): string | null {
   if (!vendorFixable(f)) return null;
@@ -459,6 +520,8 @@ export function issuesOf(ctx: ExplainContext): IssueView[] {
       next: advise ? adviceText(adviceFor({ code: f.code, finding: f }, x), offered) : null,
       line_no: f.line_no ?? null,
       vendor_fixable: vendorFixable(f) || paired.some(vendorFixable),
+      tier: tierOf(f.code, f.evidence.field),
+      impact: impactOf(f, x),
     });
   }
   // Holds recorded on the run without an engine finding (spec 11 rows 2, 7 and 8).
@@ -476,6 +539,7 @@ export function issuesOf(ctx: ExplainContext): IssueView[] {
       codes: [code], title: CODE_TEXT[code]?.title ?? code, explain,
       next: advise ? adviceText(adviceFor({ code }, x), offered) : null,
       line_no: null, vendor_fixable: code === "EXTRACTION_FAILED" || code === "MANUAL_HOLD",
+      tier: tierOf(code), impact: null,
     });
   }
   return out.sort((a, b) => severity(a.codes[0]) - severity(b.codes[0]) || (a.line_no ?? 0) - (b.line_no ?? 0));
