@@ -14,10 +14,11 @@ email / upload ─▶ 0 intake ─▶ 1 read (AI) ─▶ 2-9 checks (code) ─�
 
 - **The AI only reads.** One call turns the PDF or image into structured fields (`src/server/extractor`). A second
   call is made only when a line cannot be matched to the PO by wording, and it only *proposes* a match.
-- **Code decides.** Every value read is searched for in the PDF's own text (V3); vendor, sender and bank details are
-  checked against the vendor master (K1-K4); duplicates and corrections by normalised invoice number (D1-D4); lines,
-  prices, quantities and amounts against the PO with exact decimal and paise arithmetic (M, C, T rules). Rules:
-  `planning/workflow-spec.md`; engine: `src/domain/engine/evaluate.ts`.
+- **Code decides.** Every value read is searched for in the PDF's own text (V3), the invoice date included (V3c);
+  vendor, sender and bank details are checked against the vendor master (K1-K4); duplicates and corrections by
+  normalised invoice number (D1-D4); lines, prices, quantities and amounts against the PO with exact decimal and paise
+  arithmetic (M, C, T rules). Rules: `planning/workflow-spec.md`; engine: `src/domain/engine/evaluate.ts`. The review
+  screen shows how long the reading and the checks took on that invoice, as measured (the checks take milliseconds).
 - **People approve.** Nothing reaches the payment list without a reviewer. Every action needs a display name
   (demo identity, not authentication) and some need a note; every change and refusal is in the audit history.
 - **Corrections close the loop.** The app emails the vendor a correction request written by code from the findings,
@@ -76,6 +77,9 @@ npm run test:live:golden   # all 18 test invoices read by the real model (about 
 npm run typecheck; npm run lint; npm run build
 ```
 
+Browser checks (real clicks in Chromium, results checked through the API) are in `scripts/ui-check`. Its README
+says how to run them against a local server; they refuse to run against a database or a real AI reader.
+
 The golden run feeds every recorded email through the same intake adapter the app uses and applies the test
 matrix pass rule; it must also agree with the independent oracle (`oracle_results.json`).
 
@@ -88,7 +92,42 @@ matrix pass rule; it must also agree with the independent oracle (`oracle_result
 | AI | `src/server/extractor` | Versioned prompts, schema validation, retries with a backup model and a time budget, cache by file hash + prompt + model |
 | Intake | `src/server/email-intake.ts`, `src/app/api/inbound/resend` | One run per attachment; repeats ignored; fetch failures recorded |
 | Outgoing email | `src/server/correction-email.ts` | Check, send (idempotency key), then record; a failed send changes nothing |
-| App | `src/app`, `src/ui` | Next.js. The desk (what needs a decision, what is safe to approve, what is ready to export, with counts and sums from the records), the review screen (each hold with its risk, figures and safe next step; the invoice against its PO; every check; the document; the history; every action in a dialog that says what it does), the rules page and the demo inbox. Icons: lucide-react; font: IBM Plex Sans |
+| App | `src/app`, `src/ui` | Next.js. The desk (what needs a decision, what is safe to approve, what is ready to export, with counts and sums from the records), the review screen (each hold with its risk, figures and safe next step; the invoice against its PO; every check, with the measured reading and checking time; the document; the history; every action in a dialog that says what it does), the rules page and the demo inbox. The desk shows when each invoice is due (per terms); the whole audit log downloads as CSV (`/api/audit`). Icons: lucide-react; font: IBM Plex Sans |
+
+## Path to production
+
+What I would change before real invoices and real money go through it, in order:
+
+1. **Logins and roles.** Single sign-on, with roles for AP clerk, AP lead and finance. Maker-checker: whoever
+   uploaded an invoice or requested its correction cannot also approve it, and every override needs a second
+   person. Above the approval limit (Rs 2,00,000, C5) a second, named approver signs off. Today anyone can override
+   with a note.
+2. **The AI provider.** Use a paid Gemini tier, whose terms keep prompts out of product training, or Vertex AI in
+   the Mumbai region (asia-south1) so documents stay in India.
+   - The reader sits behind one interface (`Extractor` in `src/domain/runs/pipeline.ts`), so another model,
+     including a self-hosted one, replaces one file.
+   - Before switching, `npm run test:live:golden` must pass with that model.
+   - On real invoices, track how often each field is corrected by reviewers.
+3. **Email.** A verified sending domain (SPF, DKIM) so correction emails reach any vendor, not only the Resend
+   account's own mailbox.
+4. **Vendor master and POs from the ERP**, in place of the CSV files:
+   - PO validity dates and status
+   - goods receipts, for a three-way match
+   - bank changes made only in the ERP
+5. **Database access.** Each request loads only the invoices it needs (indexed queries, a paged list) instead of every
+   run, and writes lock per PO and vendor rather than one write at a time.
+6. **Work queues.**
+   - Daily alerts for invoices close to their due date (the desk shows due dates today, but sends nothing).
+   - Reminders to vendors who have not answered a correction.
+   - A note to the sender when a file is skipped as not an invoice.
+7. **Undo.** Undoing an approval until the invoice is exported (decided and deferred, Q10).
+8. **Tax.** TDS deduction; IGST against CGST and SGST by place of supply; GSTIN format and checksum; the buyer GSTIN
+   printed on the invoice.
+9. **Payment runs and audit.**
+   - Choose which approved invoices go on a payment run, in the bank's or the ERP's file format (today every approved
+     invoice goes).
+   - A filtered audit export by date, vendor and person (today one CSV of every event).
+10. **Operations.** Error alerts, the cost per invoice, a retention policy for documents, and backups.
 
 ## Assumptions and limitations
 
@@ -101,7 +140,9 @@ matrix pass rule; it must also agree with the independent oracle (`oracle_result
 - PDF limits: at most 50 pages and 200,000 characters of text, read within 15 s (opening the file included); a
   larger or slower file is recorded as unsupported rather than read in part.
   Attachments the email provider reports as over 4 MB are not downloaded.
-- INR only. GST is checked for consistency, not for tax law. Unit conversions only through the catalog.
+- INR only. GST is checked for arithmetic consistency, not for tax law: IGST against CGST and SGST, the GSTIN format
+  and the buyer GSTIN on the invoice are not checked, and TDS is not handled. Unit conversions only through the catalog.
+- PO dates and validity are not checked: an open PO matches whatever its date.
 - Lump-sum lines are recognised only by explicit markers and always held. Credit notes and discounts are not processed.
 - Charge wording outside the keyword list ends as LINE_UNMAPPED (still held).
 - Disputes against an exported invoice need the company's credit-note process: the new invoice can only be held or rejected.
@@ -110,6 +151,10 @@ matrix pass rule; it must also agree with the independent oracle (`oracle_result
 - Uploads are trusted as internal actions (no sender check).
 - V3 is a presence check: it catches values the document does not contain, not a misread that matches another value on the page.
   Amounts must appear as the same whole number (a misread 1300.00 is not vouched for by a printed 13,000.00).
+  The invoice date must appear as the same day (V3c).
+  - Numeric dates are read day first, as Indian invoices print them. A vendor that prints the month first
+    (10/12/2026 for 12 October) is held, and a reviewer checks the date.
+  - A date read from elsewhere on the page, such as the due date, is vouched for, like any other V3 value.
 - Line matching by description (M1) accepts an invoice line that contains every word of the PO line, so "Food
   container lid 500 ml" matches "Food container 500 ml". AI-proposed matches are held to a stricter rule (two item
   words in common, including the word that names the item); the deterministic M1 match is not.
@@ -121,7 +166,20 @@ matrix pass rule; it must also agree with the independent oracle (`oracle_result
 - Overriding a bank, vendor, GSTIN or sender hold needs a recorded call to the vendor-master number. The call time has
   no earliest limit, because a vendor may call about a bank change before sending the invoice.
 - "Paid" is never shown: payment happens in finance's own process after export.
-- Accuracy figures describe this synthetic test set only. Free-tier AI content may be used by the provider: use fictional data only.
+- Due dates on the desk are display only. For an invoice not cleared yet, the due date is its invoice date plus the
+  vendor's terms. Nothing is sent or escalated when a date is near.
+- An approval cannot be undone. A mistaken one goes out on the next payment list, and finance has to stop it in
+  their own process; undo before export is deferred (Q10).
+- Export takes every approved invoice that is not blocked. The audit log is one CSV of every event, with no filters.
+- When a file is skipped (not an invoice, unsupported, no attachment), the sender is not told automatically.
+- Each request loads every run from the database, and writes are serialised one at a time. That is fine for a demo,
+  but not for thousands of invoices (see Path to production).
+- Timings are measured on the server around each step of the last processing. Runs processed before timings were
+  added show none.
+- Accuracy figures describe this synthetic test set only (18 invoices, 17 digital and 1 scan); real-world reading
+  accuracy has not been measured. An invoice from a vendor not in the master, such as one a tester makes, is held as
+  VENDOR_UNKNOWN, which is the intended check. Free-tier AI content may be used by the provider: use fictional data
+  only.
 - Correction emails are written by code and sent through Resend. Without a verified domain, Resend's test sender only
   delivers to the Resend account's own address; for any other vendor address the send is refused, nothing changes,
   and the reviewer can copy the text and mark it sent manually.
