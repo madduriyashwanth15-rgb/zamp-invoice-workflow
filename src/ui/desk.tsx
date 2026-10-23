@@ -381,7 +381,7 @@ function Queue({
       <h2 id="queue-h" className="sr-only">
         {v.label}
       </h2>
-      <nav aria-label="Invoice views" className="flex gap-1 overflow-x-auto border-b border-rule px-2">
+      <nav aria-label="Invoice views" className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-rule px-2">
         {VIEWS.map((x) => {
           const n = runs.filter(x.test).length;
           const on = x.id === view;
