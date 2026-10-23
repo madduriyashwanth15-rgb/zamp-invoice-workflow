@@ -238,12 +238,12 @@ const EXPECTED = [
   "Reviewer decision",
 ];
 
-/** Gap 16: the durations measured on this run, as recorded. A MOCK lookup's time is not shown: it means nothing. */
+/** Gap 16: the durations measured on this run, as recorded. MOCK lookups' times are not shown: they mean nothing. */
 function TimingLine({ timing, reader, cached }: { timing: NonNullable<RunDetail["timing"]>; reader: "ai" | "mock" | null; cached: boolean }) {
   const parts: string[] = [];
   if (reader === "ai") parts.push(`${cached ? "reading reused from the cache" : "read by the AI"} in ${formatSeconds(timing.read_ms)}`);
   parts.push(`checked by code in ${formatSeconds(timing.check_ms)}`);
-  if (timing.propose_ms > 0) parts.push(`plus ${formatSeconds(timing.propose_ms)} for the ${reader === "ai" ? "AI" : "MOCK"} line-match proposal`);
+  if (reader === "ai" && timing.propose_ms > 0) parts.push(`plus ${formatSeconds(timing.propose_ms)} for the AI line-match proposal`);
   const text = parts.join(", ");
   return (
     <span className="mt-1 block text-ink-3">
