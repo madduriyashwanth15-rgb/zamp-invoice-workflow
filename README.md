@@ -93,6 +93,9 @@ matrix pass rule; it must also agree with the independent oracle (`oracle_result
 ## Assumptions and limitations
 
 - Text-layer evidence only: scans and photos with no text layer are always held for a human check (SCAN_UNVERIFIED).
+  That includes handwritten invoices; how well the model reads handwriting has not been measured. On a scan there is
+  no text to search for bank wording, so when no account is read the review screen says so and the reviewer checks
+  the image against the vendor master.
   A scanned PDF that already carries an OCR text layer is treated like a digital PDF, and its values are checked
   against that text.
 - PDF limits: at most 50 pages and 200,000 characters of text, read within 15 s (opening the file included); a

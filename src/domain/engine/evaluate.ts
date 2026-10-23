@@ -286,7 +286,9 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
       action: `Read the account on the document and compare it with the master (ending ${vendor.bank_last4}); if it differs, verify by phone using ${vendor.phone}`,
     });
   } else if (!ex.bank_account_last4) {
-    t.add("BANK_NOT_SHOWN", "No bank account printed; nothing to compare (K4)", { master_last4: vendor.bank_last4 });
+    // A scan has no text to search for bank wording, so "not printed" would be a guess: say only what is known.
+    if (doc.has_text_layer) t.add("BANK_NOT_SHOWN", "No bank account printed; nothing to compare (K4)", { master_last4: vendor.bank_last4 });
+    else t.add("BANK_NOT_SHOWN", "No bank account was read from the image; a scan has no text to search, so check the image against the vendor master (K4)", { master_last4: vendor.bank_last4, scan: true });
   } else if (ex.bank_account_last4 !== vendor.bank_last4) {
     t.add("BANK_DETAILS_CHANGED", "Bank account differs from the trusted vendor master (K4)", {
       printed_last4: ex.bank_account_last4, master_last4: vendor.bank_last4,

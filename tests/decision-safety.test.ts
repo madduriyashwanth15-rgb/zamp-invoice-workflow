@@ -208,3 +208,24 @@ describe("M3b: one shared word is not enough (review 23 Oct)", () => {
     expect(r.outcome).toBe("CLEARED");
   });
 });
+
+describe("handwritten or scanned invoice with no bank account read", () => {
+  it("says no account was read from the image (not that none is printed), still held for the scan, no bank code", async () => {
+    const e = extractionOf("S7");
+    e.bank_account_last4 = null;
+    e.bank_account_number = null;
+    const r = await evalDirect(e, { document: { has_text_layer: false, text_layer: "" } });
+    expect(codes(r)).toEqual(["SCAN_UNVERIFIED"]);
+    const bank = r.info.find((f) => f.code === "BANK_NOT_SHOWN")!;
+    expect(bank.message).toMatch(/read from the image/);
+    expect(bank.message).not.toMatch(/printed/);
+    expect(bank.evidence.scan).toBe(true);
+  });
+  it("a digital invoice with no bank wording keeps the plain message", async () => {
+    const e = extractionOf("S1");
+    e.bank_account_last4 = null;
+    e.bank_account_number = null;
+    const r = await evalDirect(e);
+    expect(r.info.find((f) => f.code === "BANK_NOT_SHOWN")!.message).toMatch(/^No bank account printed/);
+  });
+});

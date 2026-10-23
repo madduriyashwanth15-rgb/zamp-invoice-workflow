@@ -60,7 +60,7 @@ export const CODE_TEXT: Record<ReasonCode, { title: string; next?: string }> = {
   PO_INFERRED: { title: "PO inferred: no PO printed" },
   PRICE_WITHIN_TOLERANCE: { title: "Price within tolerance" },
   PRICE_BELOW_PO: { title: "Price below the PO" },
-  BANK_NOT_SHOWN: { title: "No bank details printed" },
+  BANK_NOT_SHOWN: { title: "No bank account shown or read" },
   LINE_MAPPED_AI_VERIFIED: { title: "Line matched by AI, verified by code" },
   CORRECTION_OF: { title: "Correction of an earlier invoice" },
   CORRECTION_CANDIDATE_OF: { title: "Possible correction of an earlier invoice" },
