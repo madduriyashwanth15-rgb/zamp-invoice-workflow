@@ -196,7 +196,8 @@ function explainFinding(f: Finding, x: Facts): string {
       }
       return `Not found on the invoice as read: ${list(strs(e.missing))}.`;
     case "EVIDENCE_NOT_FOUND": {
-      const missing = strs(e.not_found);
+      // A date reads as a day ("10 May 2026"), so a reviewer sees a swapped day and month at a glance (V3c).
+      const missing = strs(e.not_found).map((v) => v.replace(/^invoice date = (\d{4}-\d{2}-\d{2})$/, (_, iso) => `invoice date read as ${formatDate(iso)}`));
       return `${missing.length} of ${e.searched} values read could not be found in the document's text: ${list(missing)}.`;
     }
     case "SCAN_UNVERIFIED":

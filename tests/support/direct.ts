@@ -10,8 +10,11 @@ export function extractionOf(testId: string): Extraction {
   return parseExtraction(structuredClone(tests.get(testId)!.expected_extraction));
 }
 
+/** An ISO date as Indian invoices print it (2026-10-12 -> 12/10/2026), for V3c. */
+const printed = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : null);
+
 export function textFrom(e: Extraction): string {
-  const parts = [e.document_title, e.number_label, e.invoice_number, e.vendor_name, e.vendor_gstin, e.po_reference, e.subtotal, e.cgst, e.sgst, e.tax_total, e.total, e.bank_account_last4];
+  const parts = [e.document_title, e.number_label, e.invoice_number, printed(e.invoice_date), e.vendor_name, e.vendor_gstin, e.po_reference, e.subtotal, e.cgst, e.sgst, e.tax_total, e.total, e.bank_account_last4];
   for (const l of e.lines) parts.push(l.description, l.qty, l.uom, l.unit_price, l.amount);
   return parts.filter(Boolean).join("\n");
 }

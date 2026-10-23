@@ -1,5 +1,5 @@
 import Decimal from "decimal.js";
-import { addDays } from "../dates";
+import { addDays, printedDates } from "../dates";
 import { REASON_CODES, SEVERITY, type ReasonCode } from "../codes";
 import { isLumpSum, matchedChargeKeywords } from "../detect";
 import type { Extraction, ExtractionLine } from "../extraction-schema";
@@ -212,10 +212,14 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
   if (doc.has_text_layer) {
     const text = normText(doc.text_layer);
     const amounts = printedAmounts(doc.text_layer);
+    const dates = printedDates(doc.text_layer);
     // V3b (spec v1.4, audit A05): an amount must be printed as a whole number on the page, equal in value
     // ("13,000.00" for 13000), not found inside a longer one ("1,00,000" no longer vouches for 1000).
-    const needles: [string, string, "text" | "amount"][] = [];
+    // V3c (spec v1.4, 23 Oct): the invoice date must be printed as the same calendar day; numeric dates are read
+    // day first, so a reader that swapped the day and the month is caught.
+    const needles: [string, string, "text" | "amount" | "date"][] = [];
     if (ex.invoice_number) needles.push(["invoice number", ex.invoice_number, "text"]);
+    if (ex.invoice_date) needles.push(["invoice date", ex.invoice_date, "date"]);
     if (ex.total != null) needles.push(["total", ex.total, "amount"]);
     if (ex.po_reference) needles.push(["PO reference", ex.po_reference, "text"]);
     for (const l of ex.lines) {
@@ -223,7 +227,8 @@ export async function evaluate(input: EngineInput): Promise<EngineResult> {
       if (l.unit_price != null) needles.push([`line ${l.line_no} unit price`, l.unit_price, "amount"]);
     }
     if (ex.bank_account_last4) needles.push(["bank account last 4", ex.bank_account_last4, "text"]);
-    const found = ([, v, kind]: (typeof needles)[number]) => (kind === "amount" ? amounts.has(amountKey(v)) : text.includes(normText(v)));
+    const found = ([, v, kind]: (typeof needles)[number]) =>
+      kind === "amount" ? amounts.has(amountKey(v)) : kind === "date" ? dates.has(v) : text.includes(normText(v));
     const notFound = needles.filter((n) => !found(n)).map(([k, v]) => `${k} = ${v}`);
     if (notFound.length) {
       t.add("EVIDENCE_NOT_FOUND", "Extracted values not found in the document's text layer (V3)", { searched: needles.length, not_found: notFound });
