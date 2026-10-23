@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import type { RuntimeInfo } from "@/server/runtime";
+import { modelName } from "@/lib/reader-label";
 
 // States plainly which parts of this deployment are real and which are mocked.
 
@@ -44,7 +45,7 @@ export function SystemStrip() {
       <Row
         label="Reader"
         warn={info.extractor === "mock"}
-        value={info.extractor === "gemini" ? `Gemini ${info.model}${info.fallbackModel ? `, backup ${info.fallbackModel}` : ""}` : "MOCK (answer key, test files only)"}
+        value={info.extractor === "gemini" ? `${modelName(info.model ?? "")}${info.fallbackModel ? `, backup ${modelName(info.fallbackModel)}` : ""}` : "MOCK (answer key, test files only)"}
       />
       <Row label="Records" warn={info.store === "memory"} value={info.store === "postgres" ? "Postgres" : "in memory, cleared on restart"} />
       <Row label="Email" warn={info.correctionEmail.mode !== "send"} value={info.correctionEmail.mode === "send" ? "sends correction requests" : "copy and send by hand"} />

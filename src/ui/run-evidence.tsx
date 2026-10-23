@@ -6,6 +6,7 @@ import { ArrowUpRight, Check, ChevronDown, CircleAlert, ExternalLink, FileText, 
 import type { FindingView, PoTableView, RunDetail, StageView } from "@/server/views";
 import { formatDate, formatInr, formatTime } from "@/lib/format";
 import { CODE_TEXT, STATE_TEXT } from "@/lib/reason-text";
+import { readerLabel } from "@/lib/reader-label";
 import { SHORT_STATE, StateChip } from "./chips";
 import { Absent, Panel, SourceTag, cx } from "./kit";
 
@@ -466,7 +467,7 @@ export function DocumentPanel({ run }: { run: RunDetail }) {
       </div>
       <div id="pane-values" role="tabpanel" aria-labelledby="tab-values" hidden={tab !== "values"}>
         <div className="flex flex-wrap items-center gap-2 border-b border-rule bg-surface-2 px-4 py-2 text-[12px] text-ink-2">
-          {reader && <SourceTag source={reader} label={reader === "ai" ? `Read by ${run.extracted_by?.extractor}` : "MOCK reading (answer key)"} />}
+          {reader && <SourceTag source={reader} label={reader === "ai" ? `Read by ${readerLabel(run.extracted_by?.extractor)}` : "MOCK reading (answer key)"} />}
           <span>{run.extraction ? "Values as read, before any check. Code compares each one with the document text and the reference data." : "Nothing read yet."}</span>
         </div>
         {run.extraction ? (

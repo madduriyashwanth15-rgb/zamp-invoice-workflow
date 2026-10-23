@@ -9,6 +9,7 @@ import { nextToken } from "@/domain/runs/actions";
 import { formatDate, formatInr, formatTime } from "@/lib/format";
 import { CODE_TEXT, STATE_TEXT, type Tone } from "@/lib/reason-text";
 import { sortTiers, tierOf, type IssueTier } from "@/lib/issue-tier";
+import { readerLabel } from "@/lib/reader-label";
 import { holdNoteOf, issuesOf, readerName, recommendedAction, unitInr, vendorReasons, type ExplainContext, type IssueView, type Recommended } from "./explain";
 
 // JSON view models for the UI (no bigint, no internal objects). Presentation only: every value comes from the run.
@@ -302,7 +303,7 @@ function stagesOf(run: RunRecord, named: (t: string) => string = (t) => t): Stag
   const label = run.extracted_by?.extractor ?? null;
   const ai = Boolean(label && /gemini/i.test(label));
   const read: StageView = {
-    n: 1, id: "read", title: "Read the document", by: label ?? "Extractor", by_ai: ai, status_text: null,
+    n: 1, id: "read", title: "Read the document", by: readerLabel(label) ?? "Extractor", by_ai: ai, status_text: null,
     status: run.state === "RECEIVED" ? "pending" : run.state === "PROCESSING" && !run.extraction ? "running" : run.extraction ? "passed" : "failed",
     notes: [], findings: [],
   };
