@@ -5,6 +5,7 @@ import { loadAnswerKey, loadEmail, TEST_DATA_DIR } from "@/fixtures/load";
 import { PgRunStore } from "@/server/db/pg-store";
 import { ingestEmail, type EmailIntakeResult } from "@/server/email-intake";
 import { runtime } from "@/server/runtime";
+import { MAIN, type Workspace } from "@/server/workspace-id";
 
 // Demo tools. "Replay" feeds a RECORDED test email (test-data/emails) through the real email intake adapter, as if
 // the vendor had just sent it: the email provider is simulated, everything after it is the real pipeline.
@@ -46,9 +47,12 @@ export function sampleFile(testId: string): { bytes: Uint8Array; filename: strin
   return { bytes: new Uint8Array(readFileSync(path.join(TEST_DATA_DIR, att.path))), filename: att.filename, content_type: att.content_type };
 }
 
-/** Replays one recorded email. A reply that must carry our token gets the token actually issued in this app. */
-export async function replay(testId: string): Promise<EmailIntakeResult> {
-  const { deps } = runtime();
+/**
+ * Replays one recorded email into one workspace. A reply that must carry our token gets the token actually issued
+ * in that workspace.
+ */
+export async function replay(testId: string, ws: Workspace = MAIN): Promise<EmailIntakeResult> {
+  const deps = runtime().depsFor(ws);
   const t = loadAnswerKey().tests.find((x) => x.test_id === testId);
   if (!t) throw new Error(`no recorded email ${testId}`);
   const tokens: Record<string, string> = {};
@@ -71,14 +75,17 @@ export async function replay(testId: string): Promise<EmailIntakeResult> {
 }
 
 /**
- * Empties every run. Saved readings (the extraction cache) are kept unless `forgetReadings` is set; then the next
- * run of each file calls the AI again, which is what a live demo of real reading needs (and costs quota).
- * Returns how many saved readings were forgotten (null when none were asked to be, or the MOCK reader is active).
+ * Resets the shared inbox: empties every run in every workspace (private sandboxes included). Saved readings (the
+ * extraction cache) are kept unless `forgetReadings` is set; then the next run of each file calls the AI again,
+ * which is what a live demo of real reading needs (and costs quota). Returns how many saved readings were
+ * forgotten (null when none were asked to be, or the MOCK reader is active). A sandbox's "Start again" never comes
+ * here: it moves the visitor to a new, empty sandbox and deletes nothing (workspace.ts).
  */
 export async function resetDemo(opts: { forgetReadings?: boolean } = {}): Promise<{ forgotten: number | null }> {
   const rt = runtime();
   if (rt.deps.store instanceof PgRunStore) await rt.deps.store.reset();
   else rt.deps.store = new MemoryRunStore();
+  rt.forgetSandboxes();
   if (!opts.forgetReadings || !rt.cache) return { forgotten: null };
   return { forgotten: await rt.cache.clear() };
 }

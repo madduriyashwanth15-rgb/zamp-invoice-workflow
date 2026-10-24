@@ -2,6 +2,8 @@ import { checkAdminKey } from "@/server/admin-guard";
 import { resetDemo } from "@/server/demo";
 import { guarded, json } from "@/server/http";
 import { runtime } from "@/server/runtime";
+import { startNewSandbox } from "@/server/workspace";
+import { isSandbox, workspaceFromCookieHeader } from "@/server/workspace-id";
 
 export async function POST(request: Request) {
   return guarded(async () => {
@@ -10,6 +12,13 @@ export async function POST(request: Request) {
     if (type !== "application/json") {
       console.warn("[demo] reset refused: UNSUPPORTED_MEDIA_TYPE");
       return json({ ok: false, code: "UNSUPPORTED_MEDIA_TYPE", reason: "Send the request as application/json" }, 415);
+    }
+    // In a private sandbox, "Start again" opens a new, empty sandbox: nothing is deleted, so no admin key is needed.
+    // Only a request that names a valid sandbox takes this path; anything else (the shared inbox, no cookie) is the
+    // shared reset below, which empties every workspace and needs the admin key.
+    if (isSandbox(workspaceFromCookieHeader(request.headers.get("cookie")))) {
+      await startNewSandbox();
+      return json({ ok: true, sandbox: true, forgotten: null });
     }
     const guard = checkAdminKey(request.headers.get("x-demo-admin-key"), { configured: process.env.DEMO_ADMIN_KEY, store: runtime().info.store });
     if (!guard.ok) {

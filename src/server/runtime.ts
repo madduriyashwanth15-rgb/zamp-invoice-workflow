@@ -13,6 +13,7 @@ import { GeminiExtractor, GeminiMappingProposer, MemoryExtractionCache, type Ext
 import { transportFromEnv } from "@/server/extractor/gemini-transport";
 import { ResendSender, type MailSender } from "@/server/correction-email";
 import { demoResetMode, type DemoResetMode } from "@/server/admin-guard";
+import { MAIN, isWorkspace, type Workspace, type WorkspaceKind } from "@/server/workspace-id";
 
 // Wires the domain to real infrastructure from environment variables. Nothing here decides anything.
 //   DATABASE_URL     Postgres (Neon demo database). Without it: an in-memory store that resets on restart.
@@ -35,10 +36,20 @@ export interface RuntimeInfo {
   correctionEmail: { mode: "send"; from: string; reply_to: string } | { mode: "manual" };
   /** How /demo reset is guarded (admin-guard.ts). The key itself is never exposed. */
   demoReset: DemoResetMode;
+  /**
+   * Which workspace this answer is for (set per request by the status route): the shared AP inbox, where real email
+   * arrives, or the visitor's private sandbox. `ap_inbox` is the real inbox address, when one is configured.
+   */
+  workspace?: { kind: WorkspaceKind; ap_inbox: string | null };
 }
 
 export interface Runtime {
+  /** The shared AP inbox ("main"): real email, the demo's history. */
   deps: PipelineDeps;
+  /** The wiring for one workspace: main is `deps` itself; a sandbox gets its own store over the same database. */
+  depsFor: (ws: Workspace) => PipelineDeps;
+  /** In-memory store only: forgets every sandbox (a reset of the shared inbox empties every workspace). */
+  forgetSandboxes: () => void;
   info: RuntimeInfo;
   /** Present when the app sends correction emails itself. */
   mail: { sender: MailSender; replyTo: string } | null;
@@ -113,8 +124,22 @@ function build(): Runtime {
     newSecret: () => randomBytes(16).toString("hex"),
     newRef: nextRef,
   };
-  return {
+  // A sandbox shares everything with the shared inbox except its store: on Postgres a store bound to the sandbox's
+  // rows (schema setup is shared, so a new sandbox costs no DDL); in memory a store of its own.
+  const sandboxes = new Map<Workspace, PipelineDeps>();
+  const rt: Runtime = {
     deps,
+    depsFor: (ws) => {
+      if (!isWorkspace(ws)) throw new Error(`invalid workspace ${ws}`);
+      if (ws === MAIN) return rt.deps;
+      let d = sandboxes.get(ws);
+      if (!d) {
+        d = { ...rt.deps, store: pool ? new PgRunStore(pool, "public", ws) : new MemoryRunStore() };
+        sandboxes.set(ws, d);
+      }
+      return d;
+    },
+    forgetSandboxes: () => sandboxes.clear(),
     mail,
     cache,
     info: {
@@ -128,6 +153,7 @@ function build(): Runtime {
       demoReset: demoResetMode(process.env.DEMO_ADMIN_KEY, dbUrl ? "postgres" : "memory"),
     },
   };
+  return rt;
 }
 
 const g = globalThis as unknown as { __ps1Runtime?: Runtime };

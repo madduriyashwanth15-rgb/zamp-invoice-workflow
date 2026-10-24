@@ -20,10 +20,15 @@ export function testPool(): Pool {
   return pool;
 }
 
-export function freshPgStore(): PgRunStore {
+/** A new, empty schema name in the test database (dropped after the file's tests). */
+export function freshPgSchema(): string {
   const name = `t_${process.pid}_${schemas.length}_${randomBytes(3).toString("hex")}`;
   schemas.push(name);
-  return new PgRunStore(testPool(), name);
+  return name;
+}
+
+export function freshPgStore(): PgRunStore {
+  return new PgRunStore(testPool(), freshPgSchema());
 }
 
 afterAll(async () => {

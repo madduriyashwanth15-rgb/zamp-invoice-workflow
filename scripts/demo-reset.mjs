@@ -1,5 +1,6 @@
 // npm run demo:reset: empties every run table in the DEMO database (DATABASE_URL in .env.local), keeping the
-// extraction cache so re-sent files read instantly. Same effect as "Start again" on the /demo page.
+// extraction cache so re-sent files read instantly. Same effect as "Start again" in the shared inbox on the /demo
+// page: it empties every workspace, the shared inbox and every private sandbox.
 import { existsSync } from "node:fs";
 import pg from "pg";
 
@@ -10,7 +11,7 @@ if (!url) {
   process.exit(1);
 }
 // Keep in step with RUN_TABLES in src/server/db/schema.ts.
-const TABLES = ["audit_events", "approvals", "exports", "correction_requests", "reply_tokens", "documents", "deliveries", "runs"];
+const TABLES = ["runs", "documents", "reply_tokens", "deliveries", "audit_events", "approvals", "exports", "correction_requests"];
 const client = new pg.Client({ connectionString: url });
 await client.connect();
 try {
@@ -19,7 +20,7 @@ try {
     console.log("No run tables yet: the app creates them on first use. Nothing to reset.");
   } else {
     const before = await client.query("SELECT count(*)::int AS n FROM runs").catch(() => ({ rows: [{ n: 0 }] }));
-    await client.query(`TRUNCATE ${present.rows.map((r) => r.tablename).join(", ")} RESTART IDENTITY CASCADE`);
+    await client.query(`TRUNCATE ${TABLES.filter((t) => present.rows.some((r) => r.tablename === t)).join(", ")} RESTART IDENTITY CASCADE`);
     console.log(`Demo database reset: removed ${before.rows[0].n} runs with their documents, approvals, exports and history. Extraction cache kept.`);
   }
 } finally {

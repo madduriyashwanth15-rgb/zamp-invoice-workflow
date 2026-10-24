@@ -1,12 +1,13 @@
 import { connection } from "next/server";
 import { guarded, json } from "@/server/http";
 import { documentFile } from "@/server/service";
+import { currentWorkspace } from "@/server/workspace";
 
 export async function GET(_request: Request, ctx: RouteContext<"/api/runs/[id]/file">) {
   await connection();
   return guarded(async () => {
     const { id } = await ctx.params;
-    const f = await documentFile(id);
+    const f = await documentFile(id, await currentWorkspace());
     if (!f) return json({ ok: false, code: "NOT_FOUND", reason: "No stored file for this run" }, 404);
     return new Response(Buffer.from(f.bytes), {
       headers: {

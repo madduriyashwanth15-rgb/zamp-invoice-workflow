@@ -9,17 +9,19 @@ import type { ReviewAction } from "@/domain/runs/queries";
 import { paiseToRupees } from "@/domain/money";
 import { sendCorrection, type SendFailure } from "@/server/correction-email";
 import { readTextLayer } from "@/server/pdf-text";
-import { runtime } from "@/server/runtime";
+import { runtime, type RuntimeInfo } from "@/server/runtime";
 import { detail, summarize, type RunDetail, type RunSummary } from "@/server/views";
+import { MAIN, kindOf, type Workspace } from "@/server/workspace-id";
 
 // Application services behind the API routes. They translate HTTP input into domain calls and domain results
-// into view models; every rule lives in src/domain.
+// into view models; every rule lives in src/domain. Each one works in one workspace: the shared AP inbox ("main",
+// the default) or a visitor's private sandbox (workspace-id.ts). The route handlers pass the request's workspace.
 
 /** A run still PROCESSING after this long was interrupted (for example the function was stopped). */
 const STUCK_AFTER_MS = 6 * 60_000; // above the 300 s function limit, which the extractor's time budget stays under
 
-export async function listRuns(): Promise<{ runs: RunSummary[]; exports: { export_id: string; created_by: string; created_at: string; count: number }[] }> {
-  const { deps } = runtime();
+export async function listRuns(ws: Workspace = MAIN): Promise<{ runs: RunSummary[]; exports: { export_id: string; created_by: string; created_at: string; count: number }[] }> {
+  const deps = runtime().depsFor(ws);
   await failStuckRuns(deps, STUCK_AFTER_MS);
   const state = await deps.store.read((s) => ({ runs: s.runs, documents: s.documents }));
   const runs = [...state.runs.values()];
@@ -30,8 +32,9 @@ export async function listRuns(): Promise<{ runs: RunSummary[]; exports: { expor
   };
 }
 
-export async function getRun(runId: string): Promise<RunDetail | null> {
-  const { deps, mail } = runtime();
+export async function getRun(runId: string, ws: Workspace = MAIN): Promise<RunDetail | null> {
+  const deps = runtime().depsFor(ws);
+  const mail = mailFor(ws);
   const state = await deps.store.read((s) => ({ run: s.runs.get(runId), runs: s.runs, documents: s.documents, tokens: s.tokens }));
   if (!state.run) return null;
   const logs = await deps.store.logs(runId);
@@ -40,8 +43,8 @@ export async function getRun(runId: string): Promise<RunDetail | null> {
   return d;
 }
 
-export async function documentFile(runId: string): Promise<{ bytes: Uint8Array; content_type: string; filename: string } | null> {
-  const { deps } = runtime();
+export async function documentFile(runId: string, ws: Workspace = MAIN): Promise<{ bytes: Uint8Array; content_type: string; filename: string } | null> {
+  const deps = runtime().depsFor(ws);
   const doc = await deps.store.read((s) => s.documents.get(runId));
   if (!doc) return null;
   const bytes = await deps.store.documentBytes(runId);
@@ -51,8 +54,8 @@ export async function documentFile(runId: string): Promise<{ bytes: Uint8Array; 
 export type UploadResult = { run_id: string; repeat: boolean; process: (() => Promise<unknown>) | null };
 
 /** Upload (A1: an internal action by a reviewer, recorded under their demo display name). */
-export async function upload(file: File, uploader: string): Promise<UploadResult> {
-  const { deps } = runtime();
+export async function upload(file: File, uploader: string, ws: Workspace = MAIN): Promise<UploadResult> {
+  const deps = runtime().depsFor(ws);
   const name = uploader.trim();
   const base = { source: "upload" as const, sender_email: null, uploader_display_name: name, provider_email_id: null, attachment_id: null, subject: null, reply_token: null };
   const type = (file.type || "").toLowerCase();
@@ -87,8 +90,9 @@ export interface ActionBody {
   channel?: "sent" | "marked sent manually";
 }
 
-export async function act(runId: string, body: ActionBody): Promise<ActionResult<unknown> | SendFailure> {
-  const { deps, mail } = runtime();
+export async function act(runId: string, body: ActionBody, ws: Workspace = MAIN): Promise<ActionResult<unknown> | SendFailure> {
+  const deps = runtime().depsFor(ws);
+  const mail = mailFor(ws);
   const ctx = { actor: body.actor, note: body.note ?? null, expectedVersion: body.expectedVersion };
   switch (body.action) {
     case "approve": return approve(deps, [runId], ctx);
@@ -100,7 +104,14 @@ export async function act(runId: string, body: ActionBody): Promise<ActionResult
     case "reject": return reject(deps, runId, ctx);
     case "request_correction":
       if (body.channel !== "sent") return requestCorrection(deps, runId, { ...ctx, channel: "marked sent manually" });
-      if (!mail) return { ok: false, code: "EMAIL_NOT_SENT", reason: "Sending is not set up on this deployment (RESEND_API_KEY and AP_INBOX_ADDRESS). Copy the text and mark it sent manually." };
+      if (!mail) {
+        return {
+          ok: false, code: "EMAIL_NOT_SENT",
+          reason: ws === MAIN
+            ? "Sending is not set up on this deployment (RESEND_API_KEY and AP_INBOX_ADDRESS). Copy the text and mark it sent manually."
+            : "A private sandbox does not send email. Copy the text and mark it sent manually; the vendor's reply can be replayed from the demo inbox.",
+        };
+      }
       return sendCorrection(deps, runId, ctx, mail);
     case "stop_waiting": return stopWaiting(deps, runId, ctx);
     case "confirm_link": return confirmCorrectionLink(deps, runId, { ...ctx, confirmFailingChecks: body.confirmFailingChecks });
@@ -111,13 +122,13 @@ export async function act(runId: string, body: ActionBody): Promise<ActionResult
   }
 }
 
-export async function approveBatch(runIds: string[], actor: string, expectedVersions?: Record<string, number>) {
-  const { deps } = runtime();
+export async function approveBatch(runIds: string[], actor: string, expectedVersions?: Record<string, number>, ws: Workspace = MAIN) {
+  const deps = runtime().depsFor(ws);
   return approve(deps, runIds, { actor, expectedVersions });
 }
 
-export async function exportNow(actor: string) {
-  const { deps } = runtime();
+export async function exportNow(actor: string, ws: Workspace = MAIN) {
+  const deps = runtime().depsFor(ws);
   const r = await exportApproved(deps, { actor });
   return r.ok ? { ok: true as const, export_id: r.value.record.export_id, count: r.value.runs.length } : r;
 }
@@ -133,8 +144,8 @@ export function csvCell(v: string | null | undefined): string {
 }
 
 /** CSV of one export (the payment list handed to finance). Amounts as printed totals in rupees. */
-export async function exportCsv(exportId: string): Promise<string | null> {
-  const { deps } = runtime();
+export async function exportCsv(exportId: string, ws: Workspace = MAIN): Promise<string | null> {
+  const deps = runtime().depsFor(ws);
   const logs = await deps.store.logs();
   const x = logs.exports.find((e) => e.export_id === exportId);
   if (!x) return null;
@@ -151,8 +162,8 @@ export async function exportCsv(exportId: string): Promise<string | null> {
 }
 
 /** Gap 15: the whole audit trail as CSV, every event in order (read-only). Names are demo identities. */
-export async function auditCsv(): Promise<string> {
-  const { deps } = runtime();
+export async function auditCsv(ws: Workspace = MAIN): Promise<string> {
+  const deps = runtime().depsFor(ws);
   const logs = await deps.store.logs();
   const refs = await deps.store.read((s) => new Map([...s.runs.values()].map((r) => [r.run_id, r.ref])));
   const header = ["seq", "at", "run_ref", "run_id", "event", "actor", "from_state", "to_state", "transition_row", "reason_code", "note", "details_json"];
@@ -169,6 +180,22 @@ export async function auditCsv(): Promise<string> {
   return [header.join(","), ...rows.map((r) => r.join(","))].join("\r\n") + "\r\n";
 }
 
-export function info() {
-  return runtime().info;
+/** Real email leaves only from the shared inbox: replies to it come back there, never to a sandbox. */
+function mailFor(ws: Workspace) {
+  return ws === MAIN ? runtime().mail : null;
+}
+
+/** The deployment's setup as seen from one workspace: a sandbox copies and marks corrections sent by hand. */
+export function info(ws: Workspace = MAIN): RuntimeInfo {
+  const rt = runtime();
+  return {
+    ...rt.info,
+    correctionEmail: ws === MAIN ? rt.info.correctionEmail : { mode: "manual" },
+    workspace: { kind: kindOf(ws), ap_inbox: rt.mail?.replyTo ?? null },
+  };
+}
+
+/** The inbound email webhook always delivers to the shared inbox: an email carries no visitor's sandbox. */
+export function inboundDeps() {
+  return runtime().depsFor(MAIN);
 }
