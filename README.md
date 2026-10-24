@@ -29,6 +29,13 @@ email / upload ─▶ 0 intake ─▶ 1 read (AI) ─▶ 2-9 checks (code) ─�
 Live: https://zamp-invoice-workflow.vercel.app (Vercel, functions in Singapore next to the Neon database). Email
 invoices to the AP inbox shown on the Demo inbox page; sample invoices can be downloaded there.
 
+**Demo workspaces.** Every visitor works in a private sandbox of their own, kept in a cookie for 30 days. What they
+replay, upload, approve or export is seen by nobody else, and each sandbox starts empty, with references from A0001.
+Real email arrives in the shared AP inbox, which keeps the demo's history. The foot of the side menu says which one
+you are in and switches between them, so open the shared inbox to see an invoice you emailed. A sandbox never sends
+email: a correction request is copied and marked sent by hand, and the vendor's reply is replayed from the Demo inbox.
+The rules are the same everywhere; each workspace has its own duplicate history, PO use and reply references.
+
 ## Run it (Windows PowerShell)
 
 ```powershell
@@ -55,7 +62,7 @@ Settings (all optional; `.env.example` lists them):
 | `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET` | Inbound email: Resend calls `/api/inbound/resend` (signature checked) |
 | `AP_INBOX_ADDRESS` | With `RESEND_API_KEY`: correction emails are sent by the app, replies go to this inbox |
 | `RESEND_FROM` | Sender of correction emails. Default: Resend's test sender, which without a verified domain only delivers to the Resend account's own address |
-| `DEMO_ADMIN_KEY` | Admin key for "Start again" on `/demo`, sent as the `x-demo-admin-key` header. Unset: reset is open in memory and turned off with a database |
+| `DEMO_ADMIN_KEY` | Admin key for "Start again" in the shared inbox on `/demo` (it empties every workspace), sent as the `x-demo-admin-key` header. Unset: reset is open in memory and turned off with a database. "Start again" in a private sandbox needs no key: it opens a new, empty sandbox and deletes nothing |
 | `DEMO_SENDER_V01`..`V06` | Demo only: extra registered sender addresses per vendor (comma-separated), so a tester's own emails pass the sender check |
 
 Model choice (measured 22 Oct 2026): on the free tier `gemini-3.8-flash` allows 20 requests a day and returned
@@ -115,7 +122,8 @@ What I would change before real invoices and real money go through it, in order:
    - goods receipts, for a three-way match
    - bank changes made only in the ERP
 5. **Database access.** Each request loads only the invoices it needs (indexed queries, a paged list) instead of every
-   run, and writes lock per PO and vendor rather than one write at a time.
+   run, and writes lock per PO and vendor rather than one write at a time. The demo's workspace column becomes the
+   company (tenant) key, set from the login and enforced in the database (row-level security), not from a cookie.
 6. **Work queues.**
    - Daily alerts for invoices close to their due date (the desk shows due dates today, but sends nothing).
    - Reminders to vendors who have not answered a correction.
@@ -172,8 +180,8 @@ What I would change before real invoices and real money go through it, in order:
   their own process; undo before export is deferred (Q10).
 - Export takes every approved invoice that is not blocked. The audit log is one CSV of every event, with no filters.
 - When a file is skipped (not an invoice, unsupported, no attachment), the sender is not told automatically.
-- Each request loads every run from the database, and writes are serialised one at a time. That is fine for a demo,
-  but not for thousands of invoices (see Path to production).
+- Each request loads every run of its workspace from the database, and writes are serialised one at a time per
+  workspace. That is fine for a demo, but not for thousands of invoices (see Path to production).
 - Timings are measured on the server around each step of the last processing. Runs processed before timings were
   added show none.
 - Accuracy figures describe this synthetic test set only (18 invoices, 17 digital and 1 scan); real-world reading
@@ -187,7 +195,18 @@ What I would change before real invoices and real money go through it, in order:
   reset, so replaying the same files costs no calls. To show a fresh AI reading, tick "Also forget saved readings"
   when resetting on the Demo inbox page.
 - The `/demo` page simulates the email provider by replaying recorded test emails; intake and checks are the real ones.
-- On a deployment with a database, "Start again" needs the `DEMO_ADMIN_KEY` admin key and is turned off without it.
+- In the shared inbox, "Start again" empties every workspace, private sandboxes included. On a deployment with a
+  database it needs the `DEMO_ADMIN_KEY` admin key and is turned off without it. In a private sandbox it opens a
+  new, empty sandbox and deletes nothing, so it needs no key.
+- A private sandbox is identified only by a random id in a cookie (sb- and 12 characters); it is not a login.
+  - Anyone holding that id sees the sandbox.
+  - Clearing cookies or opening another browser starts a new, empty sandbox; the old one cannot be reopened from
+    the app.
+  - A link to an invoice opens only in the workspace that holds it. A teammate opening it from their own sandbox is
+    told there is no invoice with that link.
+  - Sandboxes are never removed on their own: their rows stay in the database until a reset of the shared inbox.
+    Without a database they disappear on restart, like everything else.
+- Real email (Resend) always lands in the shared inbox. Correction emails are sent only from the shared inbox.
 
 ## Secrets
 
