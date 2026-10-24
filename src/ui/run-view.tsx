@@ -49,7 +49,7 @@ function Workbench({ id }: { id: string }) {
     return (
       <div className="mx-auto max-w-lg py-16">
         <Notice tone="error" title={isRefusal(error) && error.code === "NOT_FOUND" ? "There is no invoice with this link" : "The invoice did not load"}>
-          {isRefusal(error) && error.code === "NOT_FOUND" ? "It may have been removed by a demo reset." : errorText(error)}{" "}
+          {isRefusal(error) && error.code === "NOT_FOUND" ? "It may be in another visitor's private sandbox, or removed by a demo reset." : errorText(error)}{" "}
           <Link href="/" className="font-semibold underline">
             Back to all invoices
           </Link>

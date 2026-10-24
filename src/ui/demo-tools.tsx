@@ -9,6 +9,7 @@ import { useIdentity } from "./identity";
 import { Button, Field, Notice, Panel, Skeleton, btn, cx, inputCls } from "./kit";
 import { useRuns } from "./runs-context";
 import { PageHeader } from "./shell";
+import { openWorkspace } from "./system-strip";
 
 type Scenario = { test_id: string; title: string; file: string; sender: string; needs_token_of: string | null };
 
@@ -27,6 +28,10 @@ export function DemoTools() {
   const [resetMsg, setResetMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [resetting, setResetting] = useState(false);
   const [inbox, setInbox] = useState<string | null>(null);
+  // A private sandbox (the default for each visitor) or the shared AP inbox, where real email arrives.
+  const [sandbox, setSandbox] = useState(false);
+  const [apInbox, setApInbox] = useState<string | null>(null);
+  const [switchError, setSwitchError] = useState<string | null>(null);
 
   useEffect(() => {
     api.status().then(
@@ -34,6 +39,8 @@ export function DemoTools() {
         setInbox(i.correctionEmail.mode === "send" ? i.correctionEmail.reply_to : null);
         setRealReader(i.extractor === "gemini");
         setResetMode(i.demoReset);
+        setSandbox(i.workspace?.kind === "sandbox");
+        setApInbox(i.workspace?.ap_inbox ?? null);
       },
       () => setInbox(null),
     );
@@ -60,7 +67,24 @@ export function DemoTools() {
     }
   }
 
-  const showForget = realReader && resetMode !== "disabled";
+  const showForget = realReader && resetMode !== "disabled" && !sandbox;
+
+  async function newSandbox() {
+    setResetting(true);
+    try {
+      const res = await fetch("/api/demo/reset", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actor: name, confirm: "RESET" }) });
+      const body = await res.json().catch(() => ({}));
+      setResetMsg(res.ok ? { ok: true, text: "A new, empty sandbox is ready. The invoices you tried before are no longer shown." } : { ok: false, text: body.reason ?? `The server answered ${res.status}` });
+      if (res.ok) {
+        setResult({});
+        runs.refresh();
+      }
+    } catch (e) {
+      setResetMsg({ ok: false, text: errorText(e) });
+    } finally {
+      setResetting(false);
+    }
+  }
 
   async function reset() {
     setResetting(true);
@@ -98,18 +122,33 @@ export function DemoTools() {
         meta="Replays the recorded test emails exactly as a vendor sent them: sender, subject, body and attachment. The email provider is simulated; the intake, reading, checks and decision are the real ones, and replies to a correction carry the reference this app actually issued."
       />
 
-      <Notice tone="info" title="Try a real email instead">
-        Download a sample invoice and email it as an attachment
-        {inbox ? (
-          <>
-            {" "}
-            to <span className="font-semibold">{inbox}</span>
-          </>
-        ) : (
-          " to the AP inbox"
-        )}
-        . From an address that is not registered for that vendor it is held as an unverified sender, which is the intended check.
-      </Notice>
+      {sandbox ? (
+        <Notice tone="info" title="You're in a private sandbox">
+          Replays and uploads go only here, and nobody else sees them. Real emails to{" "}
+          {apInbox ? <span className="font-semibold">{apInbox}</span> : "the AP inbox"} arrive in the shared inbox instead.{" "}
+          <button
+            type="button"
+            onClick={async () => setSwitchError(await openWorkspace("main"))}
+            className="font-semibold text-carbon-deep underline underline-offset-2"
+          >
+            Open the shared inbox
+          </button>
+          {switchError && <span className="block text-bad-fg">{switchError}</span>}
+        </Notice>
+      ) : (
+        <Notice tone="info" title="Try a real email instead">
+          Download a sample invoice and email it as an attachment
+          {inbox ? (
+            <>
+              {" "}
+              to <span className="font-semibold">{inbox}</span>
+            </>
+          ) : (
+            " to the AP inbox"
+          )}
+          . From an address that is not registered for that vendor it is held as an unverified sender, which is the intended check.
+        </Notice>
+      )}
 
       <Panel
         title="Recorded vendor emails"
@@ -175,6 +214,26 @@ export function DemoTools() {
         )}
       </Panel>
 
+      {sandbox ? (
+        <section aria-labelledby="restart-h" className="rounded-lg border border-rule bg-surface">
+          <div className="border-b border-rule px-4 py-3">
+            <h2 id="restart-h" className="text-[15px] font-semibold text-ink">
+              Start again
+            </h2>
+            <p className="mt-0.5 text-[13px] text-ink-2">Opens a new, empty sandbox for you. Nothing is deleted: this sandbox is simply left behind.</p>
+          </div>
+          <div className="space-y-3 px-4 py-3">
+            <Button icon={RotateCcw} busy={resetting} disabled={resetting} onClick={newSandbox}>
+              {resetting ? "Opening" : "Start a new sandbox"}
+            </Button>
+            {resetMsg && (
+              <Notice tone={resetMsg.ok ? "success" : "error"} live>
+                {resetMsg.text}
+              </Notice>
+            )}
+          </div>
+        </section>
+      ) : (
       <section aria-labelledby="reset-h" className="rounded-lg border border-bad-edge bg-surface">
         <div className="flex items-start gap-2 border-b border-bad-edge/60 px-4 py-3">
           <TriangleAlert aria-hidden size={16} className="mt-0.5 shrink-0 text-bad-fg" />
@@ -183,7 +242,7 @@ export function DemoTools() {
               Start again
             </h2>
             <p className="mt-0.5 text-[13px] text-ink-2">
-              Removes every invoice, approval, export and history entry. This cannot be undone.
+              Removes every invoice, approval, export and history entry, in the shared inbox and in every private sandbox. This cannot be undone.
               {showForget && " Saved readings are kept unless you tick the box, so the same files read instantly."}
             </p>
           </div>
@@ -218,6 +277,7 @@ export function DemoTools() {
           )}
         </div>
       </section>
+      )}
     </div>
   );
 }
