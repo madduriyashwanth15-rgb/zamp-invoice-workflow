@@ -7,6 +7,24 @@ import { fileURLToPath } from "node:url";
 
 export const B = (process.env.B ?? "http://localhost:3100").replace(/\/$/, "");
 
+// Demo workspaces: every visitor works in a private sandbox by default, chosen by the ps1-ws cookie. The scripts work
+// in one fixed sandbox, as a visitor would, so their API calls and their browser see the same invoices. A request
+// without the cookie would land in a new, empty sandbox.
+export const WS = process.env.UI_CHECK_WS ?? "sb-uicheckflows";
+if (!/^sb-[a-z0-9]{12}$/.test(WS)) {
+  console.error(`UI_CHECK_WS must look like sb- and 12 lowercase letters or digits, not ${WS}`);
+  process.exit(2);
+}
+export const COOKIE = `ps1-ws=${WS}; ps1-sb=${WS}`;
+/** fetch, in the scripts' sandbox. */
+export const api = (p, init = {}) => fetch(B + p, { ...init, headers: { cookie: COOKIE, ...(init.headers ?? {}) } });
+/** A browser context in the scripts' sandbox. */
+export async function context(browser, options = {}) {
+  const c = await browser.newContext(options);
+  await c.addCookies([{ name: "ps1-ws", value: WS, url: B }, { name: "ps1-sb", value: WS, url: B }]);
+  return c;
+}
+
 /** Only a local server: these checks click real buttons, and flows.mjs starts by removing every invoice. */
 export async function guard({ needsMock = true } = {}) {
   if (!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(B)) {
@@ -15,7 +33,7 @@ export async function guard({ needsMock = true } = {}) {
   }
   let info;
   try {
-    info = await (await fetch(`${B}/api/status`)).json();
+    info = await (await api("/api/status")).json();
   } catch {
     console.error(`No app answering at ${B}. Start it first (see scripts/ui-check/README.md).`);
     process.exit(2);
@@ -89,7 +107,22 @@ export function reporter() {
 }
 
 export const post = (p, body) =>
-  fetch(B + p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
-export const runs = async () => (await (await fetch(`${B}/api/runs`)).json()).runs;
+  api(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+export const runs = async () => (await (await api("/api/runs")).json()).runs;
 export const byFile = async (prefix) => (await runs()).find((r) => (r.filename ?? "").startsWith(prefix));
-export const detail = async (id) => (await fetch(`${B}/api/runs/${id}`)).json();
+export const detail = async (id) => (await api(`/api/runs/${id}`)).json();
+
+/**
+ * Empties every workspace: "Start again" in the shared inbox (ps1-ws=main), open without a key only on a local
+ * in-memory server, which guard() has checked. In a sandbox the same request would only open a new sandbox.
+ */
+export async function resetAll() {
+  const res = await fetch(`${B}/api/demo/reset`, {
+    method: "POST", headers: { "Content-Type": "application/json", cookie: "ps1-ws=main" }, body: JSON.stringify({ actor: "ui-check", confirm: "RESET" }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || body.sandbox) {
+    console.error(`Could not empty the local server (${res.status} ${body.reason ?? ""}).`);
+    process.exit(2);
+  }
+}

@@ -1,7 +1,7 @@
 // End-to-end flows through the real UI, each result verified through the API afterwards (review gap 20).
 // Local server only, in-memory store and MOCK reader only: it starts by removing every invoice (guarded in lib.mjs).
 // Usage: node scripts/ui-check/flows.mjs [outdir]     (default out/ui-check/flows; screenshots go there)
-import { B, axeSource, byFile, detail, guard, outDir, playwright, post, reporter, runs } from "./lib.mjs";
+import { B, WS, api, axeSource, byFile, context, detail, guard, outDir, playwright, post, reporter, resetAll, runs } from "./lib.mjs";
 
 await guard();
 const out = outDir(process.argv[2], "out/ui-check/flows");
@@ -9,15 +9,16 @@ const { check, skip, finish } = reporter();
 const AXE = axeSource();
 const { chromium } = playwright();
 
-// Fresh data: reset, then replay the scenario set.
-await post("/api/demo/reset", { actor: "ui-check", confirm: "RESET" });
+// Fresh data: empty the local server, then replay the scenario set into the scripts' private sandbox.
+await resetAll();
+console.log(`Working in the private sandbox ${WS}`);
 for (const t of ["S1", "S2", "S3", "S5", "S6a", "S6b", "S7", "S8", "S9", "S10", "S11", "S12", "S13", "S14"]) {
   await post("/api/demo/replay", { test_id: t });
 }
 await new Promise((r) => setTimeout(r, 2500));
 
 const browser = await chromium.launch();
-const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+const ctx = await context(browser, { viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage();
 const errors = [];
 page.on("console", (m) => m.type() === "error" && !/Failed to load resource/.test(m.text()) && errors.push(m.text()));
@@ -208,7 +209,7 @@ await page.getByLabel("Acting as").selectOption("Divya (AP)");
   await page.goto(`${B}/?view=exported`, { waitUntil: "networkidle" });
   const link = page.getByRole("link", { name: /Audit log/ });
   check("exported view links the audit log", (await link.count()) === 1 && (await link.getAttribute("href")) === "/api/audit");
-  const res = await fetch(`${B}/api/audit`);
+  const res = await api("/api/audit");
   const text = await res.text();
   const lines = text.trim().split("\r\n");
   const all = await runs();
@@ -273,7 +274,7 @@ await page.getByLabel("Acting as").selectOption("Divya (AP)");
 
 // 11. Phone: open the menu, choose a view.
 {
-  const phone = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const phone = await context(browser, { viewport: { width: 390, height: 844 } });
   const p = await phone.newPage();
   await p.goto(B + "/", { waitUntil: "networkidle" });
   await p.getByRole("button", { name: "Open menu" }).click();

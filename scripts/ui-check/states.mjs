@@ -1,17 +1,17 @@
 // Loading, empty, error and narrow-screen states (review gap 20). Network failures are injected in the browser
 // (route interception); the server and its data are untouched. Run flows.mjs first so there is data to show.
 // Usage: node scripts/ui-check/states.mjs [outdir]     (default out/ui-check/states)
-import { B, guard, outDir, playwright, reporter } from "./lib.mjs";
+import { B, api, context, guard, outDir, playwright, reporter } from "./lib.mjs";
 
 await guard();
 const out = outDir(process.argv[2], "out/ui-check/states");
 const { check, finish } = reporter();
 const { chromium } = playwright();
-const runs = (await (await fetch(`${B}/api/runs`)).json()).runs;
+const runs = (await (await api("/api/runs")).json()).runs;
 const id = (p) => runs.find((r) => (r.filename ?? "").startsWith(p))?.run_id;
 const browser = await chromium.launch();
 async function ctx(width = 1440, height = 900) {
-  const c = await browser.newContext({ viewport: { width, height } });
+  const c = await context(browser, { viewport: { width, height } });
   const p = await c.newPage();
   return { c, p };
 }

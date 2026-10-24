@@ -13,9 +13,14 @@ The vitest suite (`npm test`) covers the rules and the services. These scripts c
 
 | Script | What it does |
 |---|---|
-| `flows.mjs` | Resets, replays S1 to S14, then works through the UI. |
+| `flows.mjs` | Empties every workspace, replays S1 to S14, then works through the UI. |
 | `states.mjs` | Loading, error and empty states, injected in the browser only. |
 | `shoot.mjs` | Screenshots of every screen at 1440, 834 and 390 px. |
+| `sandboxes.mjs` | Two visitors in two browsers: a private sandbox each, switching to the shared inbox and back, and "Start again" in a sandbox. Empties every workspace first. |
+
+Every visitor works in a private sandbox (demo workspaces). `flows.mjs`, `states.mjs` and `shoot.mjs` work in one
+fixed sandbox, `sb-uicheckflows` (`UI_CHECK_WS` changes it), so their API calls and their browser see the same
+invoices. Run them in the order below: `sandboxes.mjs` empties that sandbox too.
 
 `flows.mjs` covers:
 
@@ -48,6 +53,17 @@ The vitest suite (`npm test`) covers the rules and the services. These scripts c
 
 `shoot.mjs` also fails on sideways scroll or a console error.
 
+`sandboxes.mjs` checks each result through the API with that visitor's own cookie:
+
+- two visitors get two different sandboxes; the cookies are httpOnly and SameSite=Lax
+- the side menu says which workspace you are in and switches
+- a replay in one sandbox is not seen in the other or in the shared inbox
+- the same recorded email creates a run in each sandbox, each starting at A0001
+- a link to another sandbox's invoice says so
+- "Start again" in a sandbox opens a new one and deletes nothing
+- the shared inbox's "Start again" warns that it empties every sandbox
+- the phone menu shows the workspace line
+
 ## Run them (PowerShell)
 
 The app must start **without** `DATABASE_URL` and `GEMINI_API_KEY`. Next.js reads `.env.local` on start, so move it aside first if it holds those values.
@@ -61,6 +77,7 @@ npx playwright install chromium
 node scripts/ui-check/flows.mjs
 node scripts/ui-check/states.mjs
 node scripts/ui-check/shoot.mjs
+node scripts/ui-check/sandboxes.mjs
 Rename-Item .env.local.off .env.local        # put it back; stop the server when done
 ```
 
