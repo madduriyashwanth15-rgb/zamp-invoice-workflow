@@ -1,18 +1,50 @@
-import { ArrowRight, FileSpreadsheet, PencilLine, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowRight, ArrowUpRight, FileSpreadsheet, PencilLine, ShieldCheck, UserRound } from "lucide-react";
 import { paiseToRupees } from "@/domain/money";
 import { loadReferenceData } from "@/fixtures/load";
 import { formatDate, formatInr } from "@/lib/format";
+import { modelName } from "@/lib/reader-label";
 import { withDemoSenders } from "@/server/runtime";
 import { Panel } from "@/ui/kit";
 import { PageHeader } from "@/ui/shell";
+import { ReaderWho } from "@/ui/system-strip";
+import liveGolden from "../../../reports/live-golden-gemini-3.5-flash-lite.json";
 
 // Spec 8: the settings and reference data every check uses, shown read-only.
+
+// "How this was built" (review gap 4). The live run's figures come from the recorded report in the repo, bundled at
+// build time (the import above); nothing on the card is typed in by hand, and nothing claims a run not recorded.
+
+const REPO = "https://github.com/madduriyashwanth15-rgb/zamp-invoice-workflow";
+const LIVE = liveGolden.summary;
+
+const BUILT = [
+  {
+    title: "Spec first",
+    text: "Every state, transition and reason code was written down and argued over before any code. The codes on this page point into it.",
+    link: { href: `${REPO}/blob/main/planning/workflow-spec.md`, label: "Workflow spec" },
+  },
+  {
+    title: "Tested against an answer key",
+    text: "The automated tests send all 18 recorded vendor emails through the real email intake and every check, and each outcome and reason code must match the answer key.",
+    link: { href: `${REPO}#tests`, label: "Tests" },
+  },
+  {
+    title: "Checked with the live model",
+    text: `${LIVE.passed_pass_rule} of ${LIVE.tests} scenarios passed the same rule when read by ${modelName(LIVE.model)}, recorded ${formatDate(LIVE.at)}.`,
+    link: { href: `${REPO}/blob/main/reports/live-golden-gemini-3.5-flash-lite.json`, label: "Recorded run" },
+  },
+  {
+    title: "An append-only audit log",
+    text: "Every action is recorded with who did it and when. On the Postgres database the audit records cannot be edited or deleted one by one; only a full demo reset clears them.",
+    link: { href: `${REPO}#architecture`, label: "Architecture" },
+  },
+];
 
 const STEPS = [
   {
     icon: PencilLine,
     title: "Read",
-    who: "AI model (MOCK answer key on a test setup)",
+    who: "AI model", // replaced on screen by <ReaderWho />: the reader this deployment actually runs
     text: "Reads the document into fields and lines. It never decides, computes a total that counts, or changes a state.",
   },
   {
@@ -65,11 +97,37 @@ export default function SettingsPage() {
                 {i + 1}. {st.title}
                 {i < STEPS.length - 1 && <ArrowRight aria-hidden size={14} className="ml-auto hidden text-ink-3 xl:block" />}
               </p>
-              <p className="mt-1 text-[12px] font-semibold text-ink-2">{st.who}</p>
+              <p className="mt-1 text-[12px] font-semibold text-ink-2">{i === 0 ? <ReaderWho /> : st.who}</p>
               <p className="mt-1 text-[13px] text-ink-2">{st.text}</p>
             </li>
           ))}
         </ol>
+      </Panel>
+
+      <Panel
+        title="How this was built"
+        description={
+          <>
+            The evidence behind these rules, all in the public repository.{" "}
+            <a href={`${REPO}#path-to-production`} target="_blank" rel="noreferrer" className="font-medium text-carbon-deep hover:underline">
+              What changes before real invoices go through it
+            </a>
+          </>
+        }
+      >
+        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {BUILT.map((b) => (
+            <li key={b.title} className="flex flex-col rounded-md border border-rule bg-surface-2 px-3 py-3">
+              <p className="text-[14px] font-semibold text-ink">{b.title}</p>
+              <p className="mt-1 flex-1 text-[13px] text-ink-2">{b.text}</p>
+              <a href={b.link.href} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-0.5 text-[13px] font-semibold text-carbon-deep hover:underline">
+                {b.link.label}
+                <ArrowUpRight aria-hidden size={13} />
+                <span className="sr-only"> (opens GitHub)</span>
+              </a>
+            </li>
+          ))}
+        </ul>
       </Panel>
 
       <Panel title="Rules" description="The thresholds the checks apply. The code beside each rule is its section in the workflow spec." flush>

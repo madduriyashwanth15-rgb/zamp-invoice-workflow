@@ -12,6 +12,7 @@ import { SHORT_STATE, SlipStrip, SlipSwatch, StateChip, TierBadge } from "./chip
 import { useIdentity } from "./identity";
 import { Button, Dialog, EmptyState, Notice, Skeleton, btn, cx, inputCls } from "./kit";
 import { SORTS, VIEWS, ageText, defaultSort, dueInDays, dueText, exportable, isReading, sortRuns, viewOf, type SortId, type ViewId } from "./queue";
+import { deskMetrics } from "./desk-metrics";
 import { useRuns } from "./runs-context";
 import { PageHeader } from "./shell";
 
@@ -44,6 +45,7 @@ export function Desk() {
         actions={<UploadButton upload={upload} />}
       />
       {/* When the list failed to load there is nothing to count: the queue below says so, with a retry. */}
+      {data && <MetricsStrip runs={runs} />}
       {!(error && !data) && <Attention runs={runs} loaded={Boolean(data)} listing={data} onExport={openExport} />}
       <Queue key={view.id} view={view.id} runs={runs} listing={data} loading={loading && !data} error={error} onChanged={refresh} onDrop={upload.send} onExport={openExport} />
       {exporting > 0 && <ExportDialog key={exporting} open onClose={() => setExporting((n) => -n)} listing={data} onChanged={refresh} />}
@@ -163,6 +165,78 @@ function Attention({ runs, loaded, listing, onExport }: { runs: RunSummary[]; lo
           <ExportButton listing={listing} onExport={onExport} size="sm" />
         </div>
       )}
+    </section>
+  );
+}
+
+// ---- the metrics strip: across every invoice in the workspace, not only what needs doing now (review gaps 2 and 3)
+
+function MetricsStrip({ runs }: { runs: RunSummary[] }) {
+  const m = useMemo(() => deskMetrics(runs), [runs]);
+  if (m.decided === 0) {
+    return (
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-dashed border-rule-strong bg-surface px-4 py-3">
+        <p className="min-w-0 text-[13px] text-ink-2">
+          <span className="font-semibold text-ink">No invoice has been checked in this workspace yet.</span> Send the recorded vendor emails (S1 to S14) from the Demo
+          inbox, or add an invoice, to see the straight-through rate and why invoices are held.
+        </p>
+        <Link href="/demo" className={btn("secondary", "sm")}>
+          <Mail aria-hidden size={14} />
+          Open the Demo inbox
+        </Link>
+      </div>
+    );
+  }
+  const notStraight = m.decided - m.straightThrough;
+  const moreReasons = notStraight - m.topReasons.reduce((n, x) => n + x.count, 0);
+  return (
+    <section aria-labelledby="metrics-h" className="mb-3 overflow-hidden rounded-lg border border-rule bg-surface">
+      <h2 id="metrics-h" className="border-b border-rule bg-surface-2 px-4 py-1.5 text-[12px] font-semibold text-ink-3">
+        Across the {invoices(m.decided)} checked in this workspace
+      </h2>
+      <div className="grid grid-cols-1 divide-y divide-rule sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <div className="min-w-0 px-4 py-3">
+          <span className="block text-[13px] font-semibold text-ink-2">Straight through</span>
+          <span className="mt-1 flex flex-wrap items-baseline gap-x-2">
+            <span className="num text-[26px] font-semibold leading-none text-ink">{m.ratePct}%</span>
+            <span className="num text-[13px] font-medium text-ink-2">
+              {m.straightThrough} of {m.decided}
+            </span>
+          </span>
+          <span aria-hidden className="mt-2 flex h-1.5 overflow-hidden rounded-full bg-hold-bg">
+            <span className="h-full rounded-full bg-stamp-ok transition-[width] duration-500" style={{ width: `${m.ratePct}%` }} />
+          </span>
+          <span className="mt-1.5 block text-[12px] leading-snug text-ink-3">Cleared by the checks with no hold; a person still approves each one</span>
+        </div>
+        <div className="min-w-0 px-4 py-3">
+          <span className="block text-[13px] font-semibold text-ink-2">Value on hold now</span>
+          <span className="mt-1 flex flex-wrap items-baseline gap-x-2">
+            <span className="num text-[26px] font-semibold leading-none text-ink">{formatInr(m.heldValue)}</span>
+          </span>
+          <span className="mt-1.5 block text-[12px] leading-snug text-ink-3">
+            {m.heldNow === 0 ? "Nothing is on hold or waiting for a vendor" : `${invoices(m.heldNow)} on hold or waiting for the vendor`}
+            {m.heldUnread > 0 && `; ${m.heldUnread} with no total read, not included`}
+          </span>
+        </div>
+        <div className="min-w-0 px-4 py-3">
+          <span className="block text-[13px] font-semibold text-ink-2">What held up the rest</span>
+          {notStraight === 0 ? (
+            <span className="mt-1.5 block text-[12px] leading-snug text-ink-3">Every checked invoice went straight through</span>
+          ) : (
+            <ol className="mt-1 space-y-0.5 text-[13px]">
+              {m.topReasons.map((x) => (
+                <li key={x.code} className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 truncate text-ink" title={x.title}>
+                    {x.title}
+                  </span>
+                  <span className="num shrink-0 font-medium text-ink-2">{x.count}</span>
+                </li>
+              ))}
+              {moreReasons > 0 && <li className="text-[12px] text-ink-3">and {moreReasons} more for other reasons</li>}
+            </ol>
+          )}
+        </div>
+      </div>
     </section>
   );
 }

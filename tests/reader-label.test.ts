@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { EXTRACTION_PROMPT_VERSION } from "@/server/extractor/prompt";
 import { modelName, readerLabel } from "@/lib/reader-label";
@@ -34,5 +35,15 @@ describe("the reader label names the model once", () => {
     expect(read.by).toBe(`gemini-3.5-flash-lite, prompt ${EXTRACTION_PROMPT_VERSION}`);
     expect(read.by_ai).toBe(true);
     expect(d.extracted_by?.extractor).toBe(stored);
+  });
+});
+
+describe("the Rules page names the reader this deployment runs (review gap 1)", () => {
+  it("has no hard-coded MOCK text: the Read step shows <ReaderWho />, which reads the server's setup like the sidebar", () => {
+    const page = readFileSync("src/app/settings/page.tsx", "utf-8");
+    expect(page).not.toMatch(/MOCK answer key on a test setup/);
+    expect(page).toContain("<ReaderWho />");
+    const strip = readFileSync("src/ui/system-strip.tsx", "utf-8");
+    expect(strip).toMatch(/export function ReaderWho\(\)[\s\S]*useRuntimeInfo\(\)/);
   });
 });

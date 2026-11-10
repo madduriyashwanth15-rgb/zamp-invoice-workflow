@@ -63,6 +63,14 @@ export interface RunSummary {
   approve_blocked: boolean;
   /** The kinds of risk among its holds, most serious first (presentation only; empty when nothing holds it). */
   tiers: IssueTier[];
+  /**
+   * The run's main hold reason whatever its state (the metrics strip counts why invoices did not go straight through,
+   * including ones later approved by override or replaced). `primary` above is null once a run is cleared, approved or
+   * superseded; this is not. Null when the run never had a hold code.
+   */
+  hold_reason: CodeView | null;
+  /** A person sent a skipped document through the checks as an invoice (row 5): not straight through, whatever the checks found. */
+  forced_as_invoice: boolean;
 }
 
 /** One step of the routing slip in brief. Statuses come from the run's recorded stages; nothing is inferred. */
@@ -196,6 +204,8 @@ export function summarize(run: RunRecord, ref: ReferenceData, state?: Pick<Store
     po_number: run.po_number, po_checked: Boolean(run.po_number) || evaluated(run, "po"), due_date: run.due_date,
     due_per_terms: run.due_date ?? termsDue(run.invoice_date ?? run.extraction?.invoice_date ?? null, vendor?.payment_terms_days),
     primary: run.state === "CLEARED" || run.state === "APPROVED" || run.state === "SUPERSEDED" ? null : primary,
+    hold_reason: run.blocking_codes.length > 0 ? primary : null,
+    forced_as_invoice: run.g1_bypassed,
     blocking_count: run.blocking_codes.length, exported: run.exported, export_id: run.export_id, export_blocked: run.export_blocked,
     version: run.version, created_at: run.created_at, updated_at: run.updated_at, filename: run.filename,
     slip: slipOf(run),

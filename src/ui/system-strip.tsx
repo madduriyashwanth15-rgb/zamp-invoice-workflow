@@ -23,6 +23,23 @@ export function useRuntimeInfo(): { info: RuntimeInfo | null; failed: boolean } 
   return { info, failed };
 }
 
+/**
+ * Who reads the document, for the Rules page's "How a decision is made" (review gap 1): the reader this deployment
+ * actually runs, from the same setup answer as the sidebar, so the two never disagree. Until the setup has loaded
+ * (or if it fails to) it says only "AI model", never MOCK or a model name it has not been told.
+ */
+export function ReaderWho() {
+  const { info } = useRuntimeInfo();
+  if (!info) return <>AI model</>;
+  if (info.extractor === "mock") return <>MOCK answer key (no AI; test files only)</>;
+  return (
+    <>
+      AI model ({modelName(info.model ?? "")}
+      {info.fallbackModel ? `, backup ${modelName(info.fallbackModel)}` : ""})
+    </>
+  );
+}
+
 function Row({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
     <div className="flex items-baseline gap-2">
